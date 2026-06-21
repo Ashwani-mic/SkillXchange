@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkillXchange — Teach What You Know. Learn What You Don't.</title>
+  <meta name="description" content="SkillXchange is a professional peer-to-peer skill exchange platform. Teach what you know, learn what you don't — live video classes, real-time chat, and smart matching.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- =================== LANDING PAGE =================== -->
+<div id="landing-view" class="view-container">
+  <!-- Particles/Orbs Background -->
+  <div class="landing-bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="landing-nav">
+    <div class="nav-brand">
+      <div class="nav-logo-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
+      <span class="nav-brand-name">SkillXchange</span>
+    </div>
+    <div class="nav-actions">
+      <button class="btn btn-ghost" id="nav-login-btn">Log In</button>
+      <button class="btn btn-primary" id="nav-signup-btn">Get Started Free</button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-badge">
+      <i class="fa-solid fa-bolt"></i>
+      <span>Peer-to-Peer Skill Exchange Platform</span>
+    </div>
+    <h1 class="hero-title">
+      Teach What You Know.<br>
+      <span class="gradient-text">Learn What You Don't.</span>
+    </h1>
+    <p class="hero-subtitle">Connect with peers worldwide, exchange skills through live video sessions, and grow together — completely free. No tuition. No fees. Just knowledge.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary btn-xl" id="hero-start-btn">
+        <i class="fa-solid fa-rocket"></i> Start Exchanging Skills
+      </button>
+      <button class="btn btn-ghost btn-xl" id="hero-login-btn">
+        <i class="fa-solid fa-sign-in-alt"></i> Log In
+      </button>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="stat-num" data-count="2400">0</span>
+        <span class="stat-label">Active Learners</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <span class="stat-num" data-count="180">0</span>
+        <span class="stat-label">Skills Available</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <span class="stat-num" data-count="9800">0</span>
+        <span class="stat-label">Sessions Completed</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features-section">
+    <h2 class="section-title">Everything You Need to <span class="gradient-text">Exchange Skills</span></h2>
+    <div class="features-grid">
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-purple"><i class="fa-solid fa-circle-nodes"></i></div>
+        <h3>Smart Matching</h3>
+        <p>Our algorithm finds peers who teach what you want to learn AND want to learn what you teach — perfect mutual exchanges.</p>
+      </div>
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-cyan"><i class="fa-solid fa-video"></i></div>
+        <h3>Live Video Classes</h3>
+        <p>Real peer-to-peer WebRTC video sessions. No third-party meeting apps. Camera, mic, and screen sharing built in.</p>
+      </div>
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-green"><i class="fa-solid fa-code"></i></div>
+        <h3>Collaborative Editor</h3>
+        <p>Live synchronized code editor and whiteboard inside every class — type together, build together in real time.</p>
+      </div>
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-orange"><i class="fa-solid fa-coins"></i></div>
+        <h3>Barter Credits</h3>
+        <p>Every session you teach earns you credits. Spend credits to learn. A self-sustaining knowledge economy.</p>
+      </div>
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-pink"><i class="fa-solid fa-robot"></i></div>
+        <h3>AI Learning Assistant</h3>
+        <p>Get lesson plans, icebreakers, and curriculum structures from our built-in AI companion — always ready to help.</p>
+      </div>
+      <div class="feature-card glass-card">
+        <div class="feature-icon icon-blue"><i class="fa-solid fa-calendar-check"></i></div>
+        <h3>Class Scheduling</h3>
+        <p>Book sessions at convenient times with integrated scheduling, status tracking, and session history.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <div class="cta-card glass-card">
+      <h2>Ready to Start Your First Exchange?</h2>
+      <p>Join thousands of learners and teachers exchanging skills right now.</p>
+      <button class="btn btn-primary btn-xl" id="cta-start-btn">
+        <i class="fa-solid fa-arrow-right"></i> Join SkillXchange Free
+      </button>
+    </div>
+  </section>
+
+  <footer class="landing-footer">
+    <p>© 2026 SkillXchange — Built for Peer Learning</p>
+  </footer>
+</div>
+
+<!-- =================== AUTH MODAL =================== -->
+<div id="auth-modal" class="modal-overlay hidden">
+  <div class="modal-card auth-modal-card glass-card">
+    <button class="modal-close-btn" id="auth-modal-close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="auth-logo">
+      <div class="nav-logo-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
+      <span>SkillXchange</span>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form active">
+      <h2>Welcome Back</h2>
+      <p class="auth-subtitle">Sign in to continue your skill journey</p>
+      <div class="input-group">
+        <i class="fa-solid fa-user"></i>
+        <input type="text" id="login-username" placeholder="Username" required autocomplete="username">
+      </div>
+      <div class="input-group">
+        <i class="fa-solid fa-lock"></i>
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">
+        <i class="fa-solid fa-sign-in-alt"></i> Sign In
+      </button>
+      <p class="auth-switch">Don't have an account? <a href="#" id="to-signup">Create one free →</a></p>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signup-form" class="auth-form">
+      <h2>Join SkillXchange</h2>
+      <p class="auth-subtitle">Create your free account and start exchanging skills</p>
+      <div class="form-row">
+        <div class="input-group">
+          <i class="fa-solid fa-user"></i>
+          <input type="text" id="signup-username" placeholder="Username" required autocomplete="username">
+        </div>
+        <div class="input-group">
+          <i class="fa-solid fa-signature"></i>
+          <input type="text" id="signup-fullname" placeholder="Full Name" required>
+        </div>
+      </div>
+      <div class="input-group">
+        <i class="fa-solid fa-envelope"></i>
+        <input type="email" id="signup-email" placeholder="Email" required autocomplete="email">
+      </div>
+      <div class="input-group">
+        <i class="fa-solid fa-lock"></i>
+        <input type="password" id="signup-password" placeholder="Password (min 6 chars)" required autocomplete="new-password">
+      </div>
+      <div class="input-group">
+        <i class="fa-solid fa-circle-info"></i>
+        <textarea id="signup-bio" placeholder="Tell us your background and interests..." rows="2"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">
+        <i class="fa-solid fa-rocket"></i> Create Free Account
+      </button>
+      <p class="auth-switch">Already have an account? <a href="#" id="to-login">Sign in →</a></p>
+    </form>
+
+    <div id="auth-error" class="error-msg hidden"></div>
+    <div id="auth-loading" class="auth-loading hidden"><i class="fa-solid fa-spinner fa-spin"></i> Please wait...</div>
+  </div>
+</div>
+
+<!-- =================== APP VIEW =================== -->
+<div id="app-view" class="view-container hidden">
+
+  <!-- Top Header Bar -->
+  <header class="app-header">
+    <div class="app-header-left">
+      <div class="nav-logo-icon small"><i class="fa-solid fa-arrows-rotate"></i></div>
+      <span class="app-brand">SkillXchange</span>
+    </div>
+    <nav class="app-header-nav">
+      <button class="header-nav-btn active" data-tab="dashboard"><i class="fa-solid fa-chart-simple"></i> Dashboard</button>
+      <button class="header-nav-btn" data-tab="explore"><i class="fa-solid fa-compass"></i> Explore</button>
+      <button class="header-nav-btn" data-tab="sessions"><i class="fa-solid fa-calendar-alt"></i> My Classes</button>
+      <button class="header-nav-btn" data-tab="profile"><i class="fa-solid fa-user-gear"></i> Profile</button>
+    </nav>
+    <div class="app-header-right">
+      <div class="credits-pill" id="credits-display" title="Your Barter Credits">
+        <i class="fa-solid fa-coins"></i>
+        <span id="credits-count">5</span>
+        <span class="credits-label">Credits</span>
+      </div>
+      <div class="header-user-pill" id="header-user-pill">
+        <div class="user-avatar-sm" id="header-avatar"><i class="fa-solid fa-user"></i></div>
+        <span id="header-username">User</span>
+        <i class="fa-solid fa-chevron-down"></i>
+      </div>
+      <div class="user-dropdown glass-card hidden" id="user-dropdown">
+        <div class="dropdown-user-info">
+          <span id="dropdown-fullname">User</span>
+          <span class="dropdown-rating"><i class="fa-solid fa-star"></i> <span id="dropdown-rating">0.0</span></span>
+        </div>
+        <hr class="dropdown-divider">
+        <button class="dropdown-item" id="dropdown-profile-btn"><i class="fa-solid fa-user-gear"></i> Profile Settings</button>
+        <button class="dropdown-item danger" id="logout-btn"><i class="fa-solid fa-power-off"></i> Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="app-body">
+    <main class="main-content" id="main-content">
+
+      <!-- ====== DASHBOARD TAB ====== -->
+      <section id="tab-dashboard" class="tab-section active">
+        <!-- Welcome Banner -->
+        <div class="welcome-banner">
+          <div class="welcome-text">
+            <h1>Welcome back, <span id="welcome-name">User</span>! 👋</h1>
+            <p>Ready to teach something or learn something new today?</p>
+          </div>
+          <div class="welcome-quick-stats">
+            <div class="quick-stat-card glass-card">
+              <i class="fa-solid fa-chalkboard-user"></i>
+              <div>
+                <span class="qs-num" id="qs-teaching">0</span>
+                <span class="qs-label">Skills Teaching</span>
+              </div>
+            </div>
+            <div class="quick-stat-card glass-card">
+              <i class="fa-solid fa-book-open"></i>
+              <div>
+                <span class="qs-num" id="qs-learning">0</span>
+                <span class="qs-label">Skills Learning</span>
+              </div>
+            </div>
+            <div class="quick-stat-card glass-card">
+              <i class="fa-solid fa-handshake"></i>
+              <div>
+                <span class="qs-num" id="qs-matches">0</span>
+                <span class="qs-label">Matches Found</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Onboarding Banner -->
+        <div id="onboarding-warning" class="onboarding-banner hidden">
+          <div class="onboarding-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+          <div class="onboarding-content">
+            <h3>Set Up Your Skill Profile to Get Matched</h3>
+            <p>Add skills you <strong>teach</strong> and skills you want to <strong>learn</strong> to unlock AI-powered peer recommendations.</p>
+          </div>
+          <button class="btn btn-warning" id="onboarding-warning-btn">Add Skills Now →</button>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- Left Column: My Skills -->
+          <div class="dash-left">
+            <div class="section-card glass-card" id="skills-card-anchor">
+              <div class="section-card-header">
+                <h2><i class="fa-solid fa-graduation-cap"></i> My Skills Barter</h2>
+                <span class="section-badge" id="total-skills-badge">0 skills</span>
+              </div>
+              <form id="add-skill-form" class="skill-add-form">
+                <select id="skill-name" required>
+                  <option value="" disabled selected>Select a skill...</option>
+                  <optgroup label="💻 Tech & Coding">
+                    <option value="Frontend Development">Frontend Development</option>
+                    <option value="Backend Development">Backend Development</option>
+                    <option value="Python Programming">Python Programming</option>
+                    <option value="Mobile App Development">Mobile App Development</option>
+                    <option value="Data Science & ML">Data Science & ML</option>
+                    <option value="Cybersecurity">Cybersecurity</option>
+                    <option value="Cloud Computing">Cloud Computing</option>
+                  </optgroup>
+                  <optgroup label="🎨 Creative & Media">
+                    <option value="UI/UX Design">UI/UX Design</option>
+                    <option value="Video Editing">Video Editing</option>
+                    <option value="Graphic Design">Graphic Design</option>
+                    <option value="3D Modeling">3D Modeling</option>
+                    <option value="Photography">Photography</option>
+                    <option value="Music Production">Music Production</option>
+                  </optgroup>
+                  <optgroup label="📊 Business & Languages">
+                    <option value="Digital Marketing">Digital Marketing</option>
+                    <option value="Public Speaking">Public Speaking</option>
+                    <option value="Spanish Language">Spanish Language</option>
+                    <option value="English Communication">English Communication</option>
+                    <option value="Financial Analytics">Financial Analytics</option>
+                    <option value="Entrepreneurship">Entrepreneurship</option>
+                  </optgroup>
+                  <optgroup label="🎯 Life Skills">
+                    <option value="Chess Strategy">Chess Strategy</option>
+                    <option value="Yoga & Fitness">Yoga & Fitness</option>
+                    <option value="Cooking">Cooking</option>
+                    <option value="Piano / Music Theory">Piano / Music Theory</option>
+                  </optgroup>
+                </select>
+                <div class="skill-form-row">
+                  <select id="skill-type">
+                    <option value="teach">I Can Teach</option>
+                    <option value="learn">I Want to Learn</option>
+                  </select>
+                  <select id="skill-proficiency">
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="expert">Expert</option>
+                  </select>
+                  <button type="submit" class="btn btn-accent" id="add-skill-submit-btn">
+                    <i class="fa-solid fa-plus"></i> Add
+                  </button>
+                </div>
+              </form>
+              <div id="skill-error" class="error-msg hidden"></div>
+
+              <div class="skills-two-col">
+                <div class="skills-col">
+                  <div class="col-header teach-header"><i class="fa-solid fa-chalkboard-user"></i> I Teach</div>
+                  <div id="teach-skills-list" class="skills-list-container">
+                    <div class="skills-empty-hint">Add a skill you can teach above</div>
+                  </div>
+                </div>
+                <div class="skills-col">
+                  <div class="col-header learn-header"><i class="fa-solid fa-book-open"></i> I Learn</div>
+                  <div id="learn-skills-list" class="skills-list-container">
+                    <div class="skills-empty-hint">Add a skill you want to learn above</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Matches -->
+          <div class="dash-right">
+            <div class="section-card glass-card">
+              <div class="section-card-header">
+                <h2><i class="fa-solid fa-circle-nodes"></i> Smart Matches</h2>
+                <span class="section-badge pulse-badge" id="match-count">Loading...</span>
+              </div>
+
+              <div class="match-tabs">
+                <button class="match-tab active" id="mt-perfect">⚡ Perfect Matches</button>
+                <button class="match-tab" id="mt-partial">🤝 Partial Matches</button>
+              </div>
+
+              <div id="match-panel-perfect" class="match-panel active">
+                <div id="perfect-matches-grid" class="matches-grid">
+                  <div class="empty-state-card"><i class="fa-solid fa-circle-nodes"></i><p>No perfect matches yet.<br>Add reciprocal skills to unlock!</p></div>
+                </div>
+              </div>
+              <div id="match-panel-partial" class="match-panel">
+                <div id="partial-matches-grid" class="matches-grid">
+                  <div class="empty-state-card"><i class="fa-solid fa-handshake"></i><p>No partial matches found.</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== EXPLORE TAB ====== -->
+      <section id="tab-explore" class="tab-section">
+        <div class="tab-header-row">
+          <div>
+            <h1>Explore All Peers</h1>
+            <p>Search and connect with learners and tutors worldwide.</p>
+          </div>
+        </div>
+
+        <div class="explore-search-bar glass-card">
+          <div class="explore-search-input-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="explore-search-input" placeholder="Search by name, skill, or interest...">
+          </div>
+          <select id="explore-filter-type">
+            <option value="">All Types</option>
+            <option value="teach">Tutors (Teaching)</option>
+            <option value="learn">Learners</option>
+          </select>
+          <select id="explore-filter-rating">
+            <option value="0">All Ratings</option>
+            <option value="3">3+ Stars</option>
+            <option value="4">4+ Stars</option>
+            <option value="4.5">4.5+ Stars</option>
+          </select>
+          <button class="btn btn-primary" id="explore-search-btn"><i class="fa-solid fa-search"></i> Search</button>
+        </div>
+
+        <div id="explore-grid" class="peers-grid">
+          <div class="empty-state-card full-width"><i class="fa-solid fa-compass"></i><p>Use the search bar above to find peers.<br>Leave it blank and click Search to see everyone.</p></div>
+        </div>
+      </section>
+
+      <!-- ====== MY CLASSES TAB ====== -->
+      <section id="tab-sessions" class="tab-section">
+        <div class="tab-header-row">
+          <div>
+            <h1>My Scheduled Classes</h1>
+            <p>Track your upcoming and past skill exchange sessions.</p>
+          </div>
+        </div>
+
+        <div class="sessions-tabs">
+          <button class="sessions-tab active" data-filter="all">All</button>
+          <button class="sessions-tab" data-filter="scheduled">Upcoming</button>
+          <button class="sessions-tab" data-filter="active">Active Now</button>
+          <button class="sessions-tab" data-filter="completed">Completed</button>
+        </div>
+        <div id="sessions-list" class="sessions-grid">
+          <div class="empty-state-card"><i class="fa-solid fa-calendar-alt"></i><p>No classes yet.<br>Book a session from a matched peer card.</p></div>
+        </div>
+      </section>
+
+      <!-- ====== PROFILE TAB ====== -->
+      <section id="tab-profile" class="tab-section">
+        <div class="tab-header-row">
+          <div>
+            <h1>Profile Settings</h1>
+            <p>Customize how others see you on SkillXchange.</p>
+          </div>
+        </div>
+        <div class="profile-layout">
+          <div class="profile-left">
+            <div class="profile-avatar-card glass-card">
+              <div class="profile-big-avatar" id="profile-big-avatar">
+                <i class="fa-solid fa-user-astronaut"></i>
+              </div>
+              <h3 id="profile-display-name">User</h3>
+              <div class="profile-rating-row">
+                <span id="profile-stars">☆☆☆☆☆</span>
+                <span id="profile-avg-rating">0.0</span>
+              </div>
+              <div class="profile-credits-row">
+                <i class="fa-solid fa-coins"></i>
+                <span id="profile-credits">5</span>
+                <span>Barter Credits</span>
+              </div>
+            </div>
+
+            <div class="section-card glass-card">
+              <h3>My Reviews</h3>
+              <div id="reviews-list" class="reviews-list">
+                <div class="empty-state-card"><i class="fa-solid fa-star"></i><p>No reviews yet.</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="profile-right">
+            <div class="section-card glass-card">
+              <h3><i class="fa-solid fa-pen-to-square"></i> Edit Profile</h3>
+              <form id="profile-edit-form">
+                <div class="form-group">
+                  <label>Full Name</label>
+                  <input type="text" id="profile-fullname" required>
+                </div>
+                <div class="form-group">
+                  <label>Bio</label>
+                  <textarea id="profile-bio" rows="4" placeholder="Tell your peers about your background, interests, and what you're excited to exchange..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label>Avatar URL (Optional)</label>
+                  <input type="text" id="profile-avatar" placeholder="https://your-photo-url.jpg">
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>
+                <div id="profile-success" class="success-msg hidden"><i class="fa-solid fa-circle-check"></i> Profile updated!</div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- =================== CHAT PANEL =================== -->
+<div id="chat-sidebar" class="side-panel closed" role="complementary" aria-label="Chat Panel">
+  <div class="side-panel-header">
+    <div class="chat-peer-info">
+      <div class="chat-peer-avatar" id="chat-peer-avatar"><i class="fa-solid fa-user"></i></div>
+      <div>
+        <h3 id="chat-partner-name">Peer</h3>
+        <span class="online-dot" id="chat-partner-status">offline</span>
+      </div>
+    </div>
+    <div class="side-panel-actions">
+      <button class="icon-action-btn call-btn" id="start-call-btn" title="Start Video Class"><i class="fa-solid fa-video"></i></button>
+      <button class="icon-action-btn ai-btn" id="ai-help-btn" title="AI Learning Assistant"><i class="fa-solid fa-robot"></i></button>
+      <button class="icon-action-btn" id="close-chat-btn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+  <div class="chat-messages-area" id="chat-messages-log"></div>
+  <form id="chat-input-form" class="chat-input-bar">
+    <input type="text" id="chat-message-input" placeholder="Type a message..." autocomplete="off">
+    <button type="submit" class="btn btn-accent round-btn"><i class="fa-solid fa-paper-plane"></i></button>
+  </form>
+</div>
+
+<!-- =================== AI ASSISTANT PANEL =================== -->
+<div id="ai-drawer" class="side-panel ai-panel closed" role="complementary" aria-label="AI Assistant">
+  <div class="side-panel-header">
+    <div class="ai-header-info">
+      <div class="ai-icon-badge"><i class="fa-solid fa-robot"></i></div>
+      <div>
+        <h3>AI Learning Assistant</h3>
+        <span style="font-size:0.75rem; color: var(--text-muted);">Powered by SkillXchange AI</span>
+      </div>
+    </div>
+    <button class="icon-action-btn" id="close-ai-btn"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="ai-chat-area" id="ai-chat-history">
+    <div class="ai-bubble assistant">
+      <i class="fa-solid fa-robot"></i>
+      <p>Hi! I'm your learning companion. Ask me for lesson plans, icebreakers, or tips for your exchange session.</p>
+    </div>
+  </div>
+  <div class="ai-quick-prompts">
+    <button class="ai-chip" data-prompt="Give me a structured 1-hour lesson plan for our session">📋 Lesson Plan</button>
+    <button class="ai-chip" data-prompt="Suggest 3 fun icebreakers for us to start with">🎯 Icebreakers</button>
+    <button class="ai-chip" data-prompt="How should we split teaching and learning time?">⏱️ Time Split</button>
+    <button class="ai-chip" data-prompt="What are good ways to track our learning progress?">📈 Goal Tracking</button>
+  </div>
+  <form id="ai-chat-form" class="chat-input-bar">
+    <input type="text" id="ai-chat-input" placeholder="Ask AI anything..." autocomplete="off">
+    <button type="submit" class="btn btn-primary round-btn"><i class="fa-solid fa-arrow-right"></i></button>
+  </form>
+</div>
+
+<!-- =================== VIRTUAL CLASSROOM =================== -->
+<div id="call-overlay" class="classroom-overlay hidden">
+  <div class="classroom-container">
+    <!-- Classroom Header -->
+    <div class="classroom-header">
+      <div class="classroom-brand">
+        <div class="nav-logo-icon small"><i class="fa-solid fa-arrows-rotate"></i></div>
+        <span>SkillXchange Classroom</span>
+      </div>
+      <div class="classroom-timer-row">
+        <div class="timer-pill"><i class="fa-solid fa-circle live-dot"></i> <span id="call-timer">00:00</span></div>
+        <span id="classroom-peer-name" class="classroom-peer-label">Session Active</span>
+      </div>
+      <div class="classroom-header-controls">
+        <button id="call-toggle-audio" class="ctrl-btn active" title="Mute/Unmute"><i class="fa-solid fa-microphone"></i></button>
+        <button id="call-toggle-video" class="ctrl-btn active" title="Camera On/Off"><i class="fa-solid fa-video"></i></button>
+        <button id="call-toggle-screen" class="ctrl-btn" title="Share Screen"><i class="fa-solid fa-desktop"></i></button>
+        <button id="call-end-btn" class="ctrl-btn end-btn" title="End Session"><i class="fa-solid fa-phone-slash"></i> End</button>
+      </div>
+    </div>
+
+    <!-- Classroom Body -->
+    <div class="classroom-body">
+      <!-- Video Feeds -->
+      <div class="video-feeds">
+        <div class="video-feed remote-feed">
+          <video id="remote-video" autoplay playsinline></video>
+          <div class="feed-mock" id="remote-mock-stream">
+            <div class="feed-mock-icon"><i class="fa-solid fa-user-graduate"></i></div>
+            <p>Waiting for peer to connect...</p>
+          </div>
+          <div class="feed-label" id="remote-video-label"><i class="fa-solid fa-circle live-dot"></i> Peer Camera</div>
+        </div>
+        <div class="video-feed local-feed">
+          <video id="local-video" autoplay playsinline muted></video>
+          <div class="feed-mock" id="local-mock-stream">
+            <div class="feed-mock-icon"><i class="fa-solid fa-video-slash"></i></div>
+            <p>Camera Off</p>
+          </div>
+          <div class="feed-label">You</div>
+        </div>
+      </div>
+
+      <!-- Workspace Panel -->
+      <div class="workspace-panel glass-card">
+        <div class="workspace-tab-bar">
+          <button class="ws-tab active" id="tab-code-editor-btn"><i class="fa-solid fa-code"></i> Code Editor</button>
+          <button class="ws-tab" id="tab-whiteboard-btn"><i class="fa-solid fa-pen-to-square"></i> Whiteboard</button>
+        </div>
+        <div id="pane-code-editor" class="ws-pane active">
+          <textarea id="code-editor-text" class="code-textarea" spellcheck="false" placeholder="// Collaborative Code Editor&#10;// Start typing — your peer sees changes in real time!&#10;"></textarea>
+        </div>
+        <div id="pane-whiteboard" class="ws-pane">
+          <textarea id="whiteboard-text" class="whiteboard-textarea" placeholder="📝 Shared Whiteboard&#10;Write notes, ideas, links, or instructions here...&#10;Both you and your peer see updates instantly!"></textarea>
+        </div>
+        <div class="ws-status-bar">
+          <span class="ws-status-dot synced" id="ws-sync-status"><i class="fa-solid fa-circle-dot"></i> Synced</span>
+          <span class="ws-hint">Changes sync in real time</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== PEER PROFILE MODAL =================== -->
+<div id="peer-profile-modal" class="modal-overlay hidden">
+  <div class="peer-profile-card glass-card">
+    <button class="modal-close-btn" id="close-peer-profile-btn"><i class="fa-solid fa-xmark"></i></button>
+    <div class="peer-profile-header">
+      <div class="peer-profile-avatar" id="modal-peer-avatar"><i class="fa-solid fa-user-astronaut"></i></div>
+      <div class="peer-profile-meta">
+        <h2 id="modal-peer-name">Peer Name</h2>
+        <div class="peer-profile-rating" id="modal-peer-rating"><i class="fa-solid fa-star"></i> 0.0</div>
+        <div class="online-dot" id="modal-peer-status">offline</div>
+      </div>
+    </div>
+    <p class="peer-profile-bio" id="modal-peer-bio">No bio provided.</p>
+    <div class="peer-profile-skills">
+      <div class="peer-skill-col">
+        <h4><i class="fa-solid fa-chalkboard-user"></i> Teaches</h4>
+        <div id="modal-teach-skills" class="modal-skills-list"></div>
+      </div>
+      <div class="peer-skill-col">
+        <h4><i class="fa-solid fa-book-open"></i> Learning</h4>
+        <div id="modal-learn-skills" class="modal-skills-list"></div>
+      </div>
+    </div>
+    <div class="peer-profile-reviews">
+      <h4><i class="fa-solid fa-star"></i> Reviews</h4>
+      <div id="modal-reviews-list" class="modal-reviews"></div>
+    </div>
+    <div class="peer-profile-actions">
+      <button class="btn btn-primary" id="modal-chat-btn"><i class="fa-solid fa-message"></i> Send Message</button>
+      <button class="btn btn-accent" id="modal-book-btn"><i class="fa-solid fa-calendar-plus"></i> Book Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== BOOK SESSION MODAL =================== -->
+<div id="book-modal" class="modal-overlay hidden">
+  <div class="modal-card glass-card">
+    <button class="modal-close-btn" id="close-book-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-icon-header">
+      <div class="modal-icon-circle icon-cyan"><i class="fa-solid fa-calendar-plus"></i></div>
+      <h2>Schedule a Class</h2>
+      <p>Book a time to exchange skills with your peer.</p>
+    </div>
+    <form id="book-session-form">
+      <div class="form-group">
+        <label>Skill to Study</label>
+        <select id="book-skill-name" required></select>
+      </div>
+      <div class="form-group">
+        <label>Date & Time</label>
+        <input type="datetime-local" id="book-datetime" required>
+      </div>
+      <div id="book-error" class="error-msg hidden"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-book-modal-btn">Cancel</button>
+        <button type="submit" class="btn btn-accent"><i class="fa-solid fa-check"></i> Confirm Booking</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- =================== REVIEW MODAL =================== -->
+<div id="review-modal" class="modal-overlay hidden">
+  <div class="modal-card glass-card">
+    <div class="modal-icon-header">
+      <div class="modal-icon-circle icon-orange"><i class="fa-solid fa-star"></i></div>
+      <h2>Rate Your Session</h2>
+      <p>Help your community by sharing honest feedback.</p>
+    </div>
+    <form id="review-form">
+      <div class="star-rating">
+        <input type="radio" name="modal-rating" value="5" id="star5" required><label for="star5"><i class="fa-solid fa-star"></i></label>
+        <input type="radio" name="modal-rating" value="4" id="star4"><label for="star4"><i class="fa-solid fa-star"></i></label>
+        <input type="radio" name="modal-rating" value="3" id="star3"><label for="star3"><i class="fa-solid fa-star"></i></label>
+        <input type="radio" name="modal-rating" value="2" id="star2"><label for="star2"><i class="fa-solid fa-star"></i></label>
+        <input type="radio" name="modal-rating" value="1" id="star1"><label for="star1"><i class="fa-solid fa-star"></i></label>
+      </div>
+      <div class="form-group">
+        <textarea id="review-comment" rows="3" placeholder="What did you learn? Were they a great communicator?"></textarea>
+      </div>
+      <div id="review-error" class="error-msg hidden"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="skip-review-btn">Skip</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast Notification Container -->
+<div id="toast-container"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
