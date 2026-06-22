@@ -1690,3 +1690,173 @@ select option, select optgroup {
   .welcome-banner { flex-direction: column; align-items: flex-start; }
   .welcome-quick-stats { width: 100%; flex-wrap: wrap; }
 }
+
+/* =================== SKILLXCHANGE CALLING & GROUP STYLE EXTENSIONS =================== */
+
+@keyframes call-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.call-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 250px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+.call-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  transition: var(--ease);
+}
+.call-history-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+.call-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.call-history-peers {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.call-history-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.call-history-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+  text-align: center;
+  min-width: 76px;
+}
+.call-history-status.completed { background: rgba(16,185,129,0.15); color: var(--emerald-light); }
+.call-history-status.rejected { background: rgba(239,68,68,0.15); color: var(--danger-light); }
+.call-history-status.missed { background: rgba(245,158,11,0.15); color: var(--orange); }
+.call-history-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.classroom-participants-drawer {
+  width: 250px;
+  flex-shrink: 0;
+  background: rgba(8, 12, 22, 0.95);
+  border-right: 1px solid var(--border-subtle);
+  padding: 14px;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+.classroom-participants-drawer.hidden {
+  display: none;
+}
+.participants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.participant-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  font-size: 0.82rem;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.participant-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.participant-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.participant-badge.connected { background: rgba(16,185,129,0.15); color: var(--emerald-light); }
+.participant-badge.invited { background: rgba(245,158,11,0.15); color: var(--orange); }
+.participant-badge.host { background: rgba(139,92,246,0.15); color: var(--primary-light); }
+
+.video-feeds.group-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  grid-template-rows: repeat(auto-fit, minmax(180px, 1fr)) !important;
+  gap: 12px !important;
+}
+.video-feeds.group-grid .video-feed {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.invite-peer-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: var(--ease);
+  user-select: none;
+  border: 1px solid rgba(255,255,255,0.02);
+}
+.invite-peer-checkbox-item:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.08);
+}
+.invite-peer-checkbox-item input {
+  cursor: pointer;
+  margin: 0;
+}
+
+.msg-bubble.incoming.call-log,
+.msg-bubble.outgoing.call-log {
+  align-self: center !important;
+  font-size: 0.82rem !important;
+  border-radius: 8px !important;
+  padding: 6px 14px !important;
+  box-shadow: none !important;
+  text-align: center;
+  max-width: 80%;
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-style: dashed !important;
+  border-width: 1px !important;
+}
+
+.msg-bubble.incoming.call-log {
+  background: rgba(245,158,11,0.08) !important;
+  border-color: rgba(245,158,11,0.3) !important;
+  color: var(--orange) !important;
+}
+
+.msg-bubble.outgoing.call-log {
+  background: rgba(139,92,246,0.08) !important;
+  border-color: rgba(139,92,246,0.3) !important;
+  color: var(--primary-light) !important;
+}
+

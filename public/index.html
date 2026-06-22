@@ -349,6 +349,18 @@
                 </div>
               </div>
             </div>
+
+            <!-- Call History Widget -->
+            <div class="section-card glass-card" style="margin-top: 16px;">
+              <div class="section-card-header">
+                <h2><i class="fa-solid fa-clock-rotate-left"></i> Classroom Call History</h2>
+                <button class="btn btn-ghost btn-sm" id="refresh-calls-btn" title="Refresh Call History"><i class="fa-solid fa-arrows-rotate"></i></button>
+              </div>
+              <div id="call-history-list" class="call-history-list">
+                <div class="empty-state-card"><i class="fa-solid fa-phone"></i><p>No recent classes logged.</p></div>
+              </div>
+            </div>
+
           </div>
 
           <!-- Right Column: Matches -->
@@ -505,6 +517,7 @@
     </div>
     <div class="side-panel-actions">
       <button class="icon-action-btn call-btn" id="start-call-btn" title="Start Video Class"><i class="fa-solid fa-video"></i></button>
+      <button class="icon-action-btn group-call-btn" id="start-group-call-btn" title="Start Group Class"><i class="fa-solid fa-users"></i></button>
       <button class="icon-action-btn ai-btn" id="ai-help-btn" title="AI Learning Assistant"><i class="fa-solid fa-robot"></i></button>
       <button class="icon-action-btn" id="close-chat-btn" title="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -558,6 +571,7 @@
       <div class="classroom-timer-row">
         <div class="timer-pill"><i class="fa-solid fa-circle live-dot"></i> <span id="call-timer">00:00</span></div>
         <span id="classroom-peer-name" class="classroom-peer-label">Session Active</span>
+        <button id="show-participants-btn" class="ctrl-btn" style="width: auto; padding: 0 10px; gap: 4px; font-size: 0.8rem;" title="Show Participants"><i class="fa-solid fa-users"></i> Peers (<span id="participants-count">1</span>)</button>
       </div>
       <div class="classroom-header-controls">
         <button id="call-toggle-audio" class="ctrl-btn active" title="Mute/Unmute"><i class="fa-solid fa-microphone"></i></button>
@@ -569,8 +583,19 @@
 
     <!-- Classroom Body -->
     <div class="classroom-body">
+      <!-- Collapsible Participants Drawer -->
+      <div id="classroom-participants-drawer" class="classroom-participants-drawer hidden glass-card">
+        <div class="drawer-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          <h4 style="margin: 0; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-users" style="color: var(--primary-light);"></i> Classroom Peers</h4>
+          <button id="close-participants-btn" class="icon-action-btn" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <ul id="classroom-participants-list" class="participants-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+          <!-- Dynamically populated: A (Host, Connected), B (Invited), C (Connected) -->
+        </ul>
+      </div>
+
       <!-- Video Feeds -->
-      <div class="video-feeds">
+      <div class="video-feeds" id="classroom-video-feeds">
         <div class="video-feed remote-feed">
           <video id="remote-video" autoplay playsinline></video>
           <div class="feed-mock" id="remote-mock-stream">
@@ -694,6 +719,52 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="skip-review-btn">Skip</button>
         <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- =================== INCOMING CALL MODAL =================== -->
+<div id="incoming-call-modal" class="modal-overlay hidden">
+  <div class="modal-card call-modal-card glass-card">
+    <div class="call-avatar-container" style="display: flex; justify-content: center; margin-bottom: 20px; position: relative;">
+      <div class="call-avatar" id="incoming-call-avatar" style="width: 80px; height: 80px; border-radius: 50%; background: rgba(139,92,246,0.2); border: 2px solid var(--primary-light); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: var(--primary-light); z-index: 2;"><i class="fa-solid fa-user-graduate"></i></div>
+      <div class="pulse-ring" style="position: absolute; width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--primary-light); animation: call-pulse 1.8s infinite; opacity: 0.8; z-index: 1;"></div>
+    </div>
+    <h2 id="incoming-call-title" style="text-align: center; margin-bottom: 8px;">Incoming Classroom Call</h2>
+    <p id="incoming-call-msg" style="text-align: center; color: var(--text-muted); font-size: 0.95rem;">Peer is inviting you to a live learning session.</p>
+    <div class="modal-actions" style="margin-top: 28px; justify-content: center; gap: 16px; display: flex;">
+      <button class="btn btn-danger btn-call-action" id="decline-call-btn" style="min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        <i class="fa-solid fa-phone-slash"></i> Decline
+      </button>
+      <button class="btn btn-success btn-call-action" id="accept-call-btn" style="min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        <i class="fa-solid fa-phone"></i> Accept
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== CREATE GROUP CALL MODAL =================== -->
+<div id="group-call-modal" class="modal-overlay hidden">
+  <div class="modal-card glass-card" style="max-width: 450px;">
+    <button class="modal-close-btn" id="close-group-call-btn"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-icon-header">
+      <div class="modal-icon-circle icon-purple"><i class="fa-solid fa-users"></i></div>
+      <h2>Start a Group Class</h2>
+      <p>Select online peers to join your live video session.</p>
+    </div>
+    <form id="group-call-form">
+      <div class="form-group">
+        <label style="margin-bottom: 10px; display: block; font-weight: 500;">Online Peers</label>
+        <div id="group-call-peers-list" class="invite-peers-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2);">
+          <!-- Dynamically populated with online peers checkboxes -->
+          <div class="skills-empty-hint">No peers are currently online.</div>
+        </div>
+      </div>
+      <div id="group-call-error" class="error-msg hidden"></div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button type="button" class="btn btn-ghost" id="cancel-group-call-btn">Cancel</button>
+        <button type="submit" class="btn btn-accent" id="launch-group-call-btn" disabled><i class="fa-solid fa-video"></i> Start Group Class</button>
       </div>
     </form>
   </div>

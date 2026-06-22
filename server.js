@@ -8,12 +8,15 @@ const path = require('path');
 const db = require('./db');
 const { getMatchesForUser } = require('./matching');
 
+const onlineUsers = new Map(); // userId -> socketId
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
-const PORT = process.env.PORT || 3000;
+
 const SESSION_SECRET = process.env.SESSION_SECRET || 'skillxchange-secret-2026';
+const PORT = process.env.PORT || 3001;
 
 // =====================================================
 //  MIDDLEWARE
@@ -93,9 +96,10 @@ app.post('/api/auth/register', async (req, res) => {
       'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating FROM users WHERE id = ?',
       [result.id]
     );
+    // Auto-login
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.status(201).json({ user });
+    res.status(201).json({ user, message: 'Account created and logged in.' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -108,17 +112,19 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const user = await db.get(
-      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating, password_hash FROM users WHERE username = ?',
+      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating, is_verified, password_hash FROM users WHERE username = ?',
       [username.trim()]
     );
     if (!user) return res.status(401).json({ error: 'User not found. Please check your username.' });
 
+    // Verify email status
+        
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Incorrect password.' });
 
     req.session.userId = user.id;
     req.session.username = user.username;
-    const { password_hash: _, ...safeUser } = user;
+    const { password_hash: _, is_verified: __, ...safeUser } = user;
     res.json({ user: safeUser });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -282,13 +288,34 @@ app.get('/api/matches', requireAuth, async (req, res) => {
 app.get('/api/messages/:partnerId', requireAuth, async (req, res) => {
   try {
     const messages = await db.all(
-      `SELECT id, sender_id, receiver_id, message, created_at
+      `SELECT id, sender_id, receiver_id, message_text AS message, timestamp AS created_at
        FROM messages
        WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-       ORDER BY created_at ASC LIMIT 100`,
+       ORDER BY timestamp ASC LIMIT 100`,
       [req.session.userId, req.params.partnerId, req.params.partnerId, req.session.userId]
     );
-    res.json({ messages });
+
+    // Fetch call logs to display inline
+    const calls = await db.all(
+      `SELECT id, caller_id, receiver_id, call_type, status, timestamp
+       FROM call_logs
+       WHERE (caller_id = ? AND receiver_id = ?) OR (caller_id = ? AND receiver_id = ?)
+       ORDER BY timestamp ASC LIMIT 50`,
+      [req.session.userId, req.params.partnerId, req.params.partnerId, req.session.userId]
+    );
+
+    const callMessages = calls.map(c => ({
+      id: 'call_' + c.id,
+      sender_id: c.caller_id,
+      receiver_id: c.receiver_id,
+      message: `📞 ${c.call_type === 'group' ? 'Group Class' : 'Classroom Session'} (${c.status})`,
+      created_at: c.timestamp,
+      is_call_log: true,
+      call_status: c.status
+    }));
+
+    const combined = [...messages, ...callMessages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    res.json({ messages: combined });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -297,11 +324,25 @@ app.post('/api/messages', requireAuth, async (req, res) => {
   const { receiver_id, message } = req.body;
   if (!receiver_id || !message?.trim()) return res.status(400).json({ error: 'Receiver and message are required.' });
   try {
-    const result = await db.run(
-      'INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)',
-      [req.session.userId, receiver_id, message.trim()]
+    const result = await db.saveDirectMessage(req.session.userId, receiver_id, message.trim());
+    res.status(201).json({ id: result?.id || null, success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/calls/history
+app.get('/api/calls/history', requireAuth, async (req, res) => {
+  try {
+    const logs = await db.all(
+      `SELECT cl.id, cl.caller_id, cl.receiver_id, cl.call_type, cl.status, cl.timestamp,
+              u1.username AS caller_name, u2.username AS receiver_name
+       FROM call_logs cl
+       JOIN users u1 ON cl.caller_id = u1.id
+       JOIN users u2 ON cl.receiver_id = u2.id
+       WHERE cl.caller_id = ? OR cl.receiver_id = ?
+       ORDER BY cl.timestamp DESC LIMIT 50`,
+      [req.session.userId, req.session.userId]
     );
-    res.status(201).json({ id: result.id, success: true });
+    res.json({ logs });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -418,47 +459,89 @@ app.post('/api/reviews', requireAuth, async (req, res) => {
 });
 
 // =====================================================
+// =====================================================
 //  AI ASSISTANT ROUTE
 // =====================================================
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 app.post('/api/ai/chat', requireAuth, async (req, res) => {
-  const { message, context } = req.body;
-  if (!message) return res.status(400).json({ error: 'Message is required.' });
+  try {
+    const { message, context } = req.body || {};
+    if (!message) return res.status(400).json({ error: 'Message is required.' });
 
-  // Smart local AI responses based on keywords
-  const msg = message.toLowerCase();
-  let reply = '';
+    // Smart local AI responses based on keywords
+    const msg = message.toLowerCase();
+    let reply = '';
 
-  if (msg.includes('lesson plan') || msg.includes('plan')) {
-    reply = `📋 **1-Hour Lesson Plan**\n\n⏱️ 0-10 min: Introductions & goal-setting. What do you each want to learn today?\n⏱️ 10-30 min: Peer A teaches their skill with live demonstration.\n⏱️ 30-35 min: Q&A and hands-on practice.\n⏱️ 35-55 min: Peer B teaches their skill.\n⏱️ 55-60 min: Wrap-up, what we learned, and schedule next session.`;
-  } else if (msg.includes('icebreaker')) {
-    reply = `🎯 **3 Great Icebreakers**\n\n1. **"One Cool Thing"** — Each person shares one thing they built or learned recently.\n2. **"Skill Map"** — Draw or describe your skill journey: where you started vs. where you are now.\n3. **"Teach Me 3 Words"** — Spend 2 minutes teaching each other the 3 most important words in your skill's vocabulary.`;
-  } else if (msg.includes('time') || msg.includes('split')) {
-    reply = `⏱️ **Recommended Time Split**\n\nFor a 60-minute session:\n- 10 min: Introduction & goals\n- 20 min: Peer 1 teaches\n- 5 min: Break\n- 20 min: Peer 2 teaches\n- 5 min: Review & next steps\n\nFor 30-minute sessions, cut each block in half. Always end with scheduling the next meeting!`;
-  } else if (msg.includes('goal') || msg.includes('track') || msg.includes('progress')) {
-    reply = `📈 **Tracking Learning Progress**\n\n✅ Set 3 specific goals per session (not vague ones — be precise!)\n✅ Use the whiteboard to write down key takeaways\n✅ Rate your confidence (1-5) before and after each session\n✅ Keep a "skill journal" — 5 minutes of notes after every class\n✅ Build a small project or demo to validate learning`;
-  } else if (msg.includes('beginner') || msg.includes('start')) {
-    reply = `🚀 **Teaching Beginners: Best Practices**\n\n1. Start with WHY — why is this skill valuable?\n2. Use analogies to familiar things (e.g., "HTML is like the bones, CSS is the skin")\n3. Show before you explain — demo first, explain second\n4. Give them something to DO in the first 10 minutes\n5. Celebrate their first small win — it builds confidence`;
-  } else if (msg.includes('video') || msg.includes('call') || msg.includes('class')) {
-    reply = `🎓 **Tips for Great Online Sessions**\n\n📷 Good lighting matters more than camera quality\n🎧 Use headphones to avoid echo\n📺 Share your screen when demonstrating — it's 10x clearer\n📝 Use the whiteboard for diagrams and notes\n⏸️ Pause frequently and ask "Does this make sense?" every 5 minutes`;
-  } else {
-    const generic = [
-      `💡 Great question! The most effective peer learning happens when both people are slightly uncomfortable — you're in the "growth zone." Push each other gently!`,
-      `🧠 Research shows that teaching something is the best way to truly learn it. Even as the "teacher," you'll discover new insights by explaining concepts aloud.`,
-      `🤝 The best skill exchanges start with trust. Spend the first few minutes getting to know each other before diving into content.`,
-      `📚 Feynman Technique: Explain the concept as if teaching a 12-year-old. Where you struggle to simplify — that's where your knowledge gap is. Perfect for identifying what to study next!`,
-      `⚡ Schedule your next session BEFORE you end the current one. Consistency is the #1 factor in successful skill learning.`,
-    ];
-    reply = generic[Math.floor(Math.random() * generic.length)];
+    if (msg.includes('lesson plan') || msg.includes('plan')) {
+      reply = `📋 **1-Hour Lesson Plan**\n\n⏱️ 0-10 min: Introductions & goal-setting. What do you each want to learn today?\n⏱️ 10-30 min: Peer A teaches their skill with live demonstration.\n⏱️ 30-35 min: Q&A and hands-on practice.\n⏱️ 35-55 min: Peer B teaches their skill.\n⏱️ 55-60 min: Wrap-up, what we learned, and schedule next session.`;
+    } else if (msg.includes('icebreaker')) {
+      reply = `🎯 **3 Great Icebreakers**\n\n1. **"One Cool Thing"** — Each person shares one thing they built or learned recently.\n2. **"Skill Map"** — Draw or describe your skill journey: where you started vs. where you are now.\n3. **"Teach Me 3 Words"** — Spend 2 minutes teaching each other the 3 most important words in your skill's vocabulary.`;
+    } else if (msg.includes('time') || msg.includes('split')) {
+      reply = `⏱️ **Recommended Time Split**\n\nFor a 60-minute session:\n- 10 min: Introduction & goals\n- 20 min: Peer 1 teaches\n- 5 min: Break\n- 20 min: Peer 2 teaches\n- 5 min: Review & next steps\n\nFor 30-minute sessions, cut each block in half. Always end with scheduling the next meeting!`;
+    } else if (msg.includes('goal') || msg.includes('track') || msg.includes('progress')) {
+      reply = `📈 **Tracking Learning Progress**\n\n✅ Set 3 specific goals per session (not vague ones — be precise!)\n✅ Use the whiteboard to write down key takeaways\n✅ Rate your confidence (1-5) before and after each session\n✅ Keep a "skill journal" — 5 minutes of notes after every class\n✅ Build a small project or demo to validate learning`;
+    } else if (msg.includes('beginner') || msg.includes('start')) {
+      reply = `🚀 **Teaching Beginners: Best Practices**\n\n1. Start with WHY — why is this skill valuable?\n2. Use analogies to familiar things (e.g., "HTML is like the bones, CSS is the skin")\n3. Show before you explain — demo first, explain second\n4. Give them something to DO in the first 10 minutes\n5. Celebrate their first small win — it builds confidence`;
+    } else if (msg.includes('video') || msg.includes('call') || msg.includes('class')) {
+      reply = `🎓 **Tips for Great Online Sessions**\n\n📷 Good lighting matters more than camera quality\n🎧 Use headphones to avoid echo\n📺 Share your screen when demonstrating — it's 10x clearer\n📝 Use the whiteboard for diagrams and notes\n⏸️ Pause frequently and ask "Does this make sense?" every 5 minutes`;
+    } else {
+      const generic = [
+        `💡 Great question! The most effective peer learning happens when both people are slightly uncomfortable — you're in the "growth zone." Push each other gently!`,
+        `🧠 Research shows that teaching something is the best way to truly learn it. Even as the "teacher," you'll discover new insights by explaining concepts aloud.`,
+        `🤝 The best skill exchanges start with trust. Spend the first few minutes getting to know each other before diving into content.`,
+        `📚 Feynman Technique: Explain the concept as if teaching a 12-year-old. Where you struggle to simplify — that's where your knowledge gap is. Perfect for identifying what to study next!`,
+        `⚡ Schedule your next session BEFORE you end the current one. Consistency is the #1 factor in successful skill learning.`,
+      ];
+      reply = generic[Math.floor(Math.random() * generic.length)];
+    }
+
+    await delay(800);
+    res.json({ reply });
+  } catch (err) {
+    console.error('AI chat error:', err?.message || err);
+    res.status(500).json({ error: 'AI Assistant request failed.', reply: 'I am here to help you exchange skills. Try asking for a lesson plan or icebreakers!' });
   }
-
-  // Simulate AI thinking delay
-  setTimeout(() => res.json({ reply }), 800);
 });
 
 // =====================================================
 //  SOCKET.IO — REAL-TIME EVENTS
 // =====================================================
-const onlineUsers = new Map(); // userId -> socketId
+const groupRooms = new Map(); // roomId -> { hostId, hostName, invitedUsers: Array<{id, name}>, connectedUsers: Map(socketId -> {userId, userName}) }
+
+function rebuildParticipantsList(room) {
+  const participantsList = [];
+  // Host
+  participantsList.push({
+    userId: room.hostId,
+    userName: room.hostName,
+    status: 'host'
+  });
+  // Invited but not connected
+  room.invitedUsers.forEach(u => {
+    if (u.id !== room.hostId) {
+      const isConnected = Array.from(room.connectedUsers.values()).some(cu => cu.userId === u.id);
+      if (!isConnected) {
+        participantsList.push({
+          userId: u.id,
+          userName: u.name,
+          status: 'invited'
+        });
+      }
+    }
+  });
+  // Connected users (except host)
+  room.connectedUsers.forEach((u) => {
+    if (u.userId !== room.hostId) {
+      participantsList.push({
+        userId: u.userId,
+        userName: u.userName,
+        status: 'connected'
+      });
+    }
+  });
+  return participantsList;
+}
 
 io.on('connection', socket => {
   let authenticatedUserId = null;
@@ -467,19 +550,38 @@ io.on('connection', socket => {
     authenticatedUserId = parseInt(userId);
     onlineUsers.set(authenticatedUserId, socket.id);
     socket.join(`user_${authenticatedUserId}`);
-    io.emit('user_online', authenticatedUserId);
+    
+    // Instantly send list of online users to the newly connected user
+    socket.emit('online_users_list', Array.from(onlineUsers.keys()));
+    
+    // Broadcast presence change to other users
+    socket.broadcast.emit('user_online', authenticatedUserId);
     console.log(`User ${authenticatedUserId} connected (socket: ${socket.id})`);
   });
 
   // Chat message
   socket.on('send_message', async ({ receiver_id, message, sender_name }) => {
     if (!authenticatedUserId) return;
-    io.to(`user_${receiver_id}`).emit('receive_message', {
+    const targetUserId = parseInt(receiver_id);
+    
+    // Commit message to SQLite database immediately
+    try {
+      await db.saveDirectMessage(authenticatedUserId, targetUserId, message.trim());
+    } catch (e) {
+      console.error('Failed to commit message to SQLite:', e.message);
+    }
+
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = {
       sender_id: authenticatedUserId,
       sender_name: sender_name,
       message,
       timestamp: new Date().toISOString()
-    });
+    };
+    
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('receive_message', payload);
+    }
   });
 
   // Code editor collaboration
@@ -492,7 +594,7 @@ io.on('connection', socket => {
     io.to(`user_${to}`).emit('whiteboard_update', { text, userId });
   });
 
-  // WebRTC Signaling
+  // WebRTC 1-on-1 Signaling
   socket.on('webrtc_offer', ({ offer, to }) => {
     io.to(`user_${to}`).emit('webrtc_offer', { offer, from: authenticatedUserId });
   });
@@ -505,12 +607,169 @@ io.on('connection', socket => {
     io.to(`user_${to}`).emit('webrtc_ice', { candidate });
   });
 
+  // WebRTC 1-on-1 Signaling Enhanced Flow
+  socket.on('call_user', async ({ to, offer, senderName }) => {
+    if (!authenticatedUserId) return;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('incoming_call', {
+        callerId: authenticatedUserId,
+        callerName: senderName,
+        offer
+      });
+    }
+  });
+
+  socket.on('decline_call', async ({ to }) => {
+    if (!authenticatedUserId) return;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('call_declined', { from: authenticatedUserId });
+    }
+    await db.saveCallLog(targetUserId, authenticatedUserId, 'direct', 'rejected');
+  });
+
+  socket.on('accept_call', async ({ to, answer }) => {
+    if (!authenticatedUserId) return;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('call_accepted', { answer, from: authenticatedUserId });
+    }
+  });
+
+  socket.on('hang_up', async ({ to, callerId, receiverId }) => {
+    if (!authenticatedUserId) return;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('call_ended', { from: authenticatedUserId });
+    }
+    const finalCallerId = parseInt(callerId) || authenticatedUserId;
+    const finalReceiverId = parseInt(receiverId) || targetUserId;
+    await db.saveCallLog(finalCallerId, finalReceiverId, 'direct', 'completed');
+  });
+
+  socket.on('cancel_call', async ({ to }) => {
+    if (!authenticatedUserId) return;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('call_cancelled', { from: authenticatedUserId });
+    }
+    await db.saveCallLog(authenticatedUserId, targetUserId, 'direct', 'missed');
+  });
+
+  // WebRTC Group Calling signaling (Mesh Network)
+  socket.on('group_call_invite', async ({ roomId, invitedUsers, senderName }) => {
+    if (!authenticatedUserId) return;
+
+    const room = {
+      hostId: authenticatedUserId,
+      hostName: senderName,
+      invitedUsers: invitedUsers.map(u => ({ id: parseInt(u.id), name: u.name })),
+      connectedUsers: new Map()
+    };
+    groupRooms.set(roomId, room);
+
+    invitedUsers.forEach(async (u) => {
+      const id = parseInt(u.id);
+      if (id === authenticatedUserId) return;
+      const recipientSocketId = onlineUsers.get(id);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('incoming_group_call', {
+          roomId,
+          callerId: authenticatedUserId,
+          callerName: senderName,
+          invitedUserIds: invitedUsers.map(usr => usr.id)
+        });
+      }
+      await db.saveCallLog(authenticatedUserId, id, 'group', 'missed');
+    });
+  });
+
+  socket.on('join_group_room', ({ roomId, userName }) => {
+    if (!authenticatedUserId) return;
+    socket.join(roomId);
+
+    let room = groupRooms.get(roomId);
+    if (!room) {
+      room = {
+        hostId: authenticatedUserId,
+        hostName: userName,
+        invitedUsers: [],
+        connectedUsers: new Map()
+      };
+      groupRooms.set(roomId, room);
+    }
+
+    room.connectedUsers.set(socket.id, { userId: authenticatedUserId, userName });
+
+    socket.to(roomId).emit('group_user_joined', {
+      userId: authenticatedUserId,
+      socketId: socket.id,
+      userName
+    });
+
+    // Broadcast updated participants list to everyone in the room
+    const participantsList = rebuildParticipantsList(room);
+    io.to(roomId).emit('group_participants_update', participantsList);
+    console.log(`User ${authenticatedUserId} joined group room ${roomId} (socket: ${socket.id})`);
+  });
+
+  socket.on('group_signal', ({ toSocketId, signalData }) => {
+    io.to(toSocketId).emit('group_signal', {
+      fromSocketId: socket.id,
+      fromUserId: authenticatedUserId,
+      signalData
+    });
+  });
+
+  socket.on('decline_group_call', async ({ initiatorId }) => {
+    if (!authenticatedUserId) return;
+    await db.saveCallLog(parseInt(initiatorId), authenticatedUserId, 'group', 'rejected');
+  });
+
+  socket.on('leave_group_room', ({ roomId }) => {
+    socket.leave(roomId);
+
+    const room = groupRooms.get(roomId);
+    if (room) {
+      room.connectedUsers.delete(socket.id);
+      const participantsList = rebuildParticipantsList(room);
+      io.to(roomId).emit('group_participants_update', participantsList);
+    }
+
+    socket.to(roomId).emit('group_user_left', {
+      socketId: socket.id,
+      userId: authenticatedUserId
+    });
+    console.log(`User ${authenticatedUserId} left group room ${roomId}`);
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     if (authenticatedUserId) {
-      onlineUsers.delete(authenticatedUserId);
-      io.emit('user_offline', authenticatedUserId);
-      console.log(`User ${authenticatedUserId} disconnected`);
+      if (onlineUsers.get(authenticatedUserId) === socket.id) {
+        onlineUsers.delete(authenticatedUserId);
+        io.emit('user_offline', authenticatedUserId);
+        console.log(`User ${authenticatedUserId} disconnected`);
+      }
+
+      // Cleanup group rooms
+      groupRooms.forEach((room, roomId) => {
+        if (room.connectedUsers.has(socket.id)) {
+          room.connectedUsers.delete(socket.id);
+          const participantsList = rebuildParticipantsList(room);
+          io.to(roomId).emit('group_participants_update', participantsList);
+          socket.to(roomId).emit('group_user_left', {
+            socketId: socket.id,
+            userId: authenticatedUserId
+          });
+        }
+      });
     }
   });
 });
@@ -525,6 +784,7 @@ app.get('*', (req, res) => {
 // =====================================================
 //  START SERVER
 // =====================================================
+
 server.listen(PORT, () => {
   console.log(`\n🚀 SkillXchange running at: http://localhost:${PORT}`);
   console.log(`   Open this URL in your browser to access the app.\n`);

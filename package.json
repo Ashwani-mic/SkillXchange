@@ -1,7 +1,7 @@
 {
-  "name": "skillsharing",
+  "name": "skillxchange",
   "version": "1.0.0",
-  "description": "SkillSharing - You teach me X, I teach you Y",
+  "description": "SkillXchange - You teach me X, I teach you Y",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,6 +12,7 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "socket.io": "^4.7.5",
+    "nodemailer": "^6.9.13",
     "sqlite3": "^5.1.7"
   }
 }

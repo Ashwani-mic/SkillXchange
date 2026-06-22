@@ -15,6 +15,12 @@ let callTimer = null;
 let callSeconds = 0;
 let currentBookingPeer = null;
 let currentReviewSession = null;
+let isGroupCall = false;
+let groupRoomId = null;
+let activeCallPartnerId = null;
+let groupPeerConnections = {}; // socketId -> RTCPeerConnection
+let groupParticipants = []; // array of { userId, socketId, userName, status }
+const onlineUserIdsSet = new Set();
 
 const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -182,6 +188,8 @@ function launchApp() {
   initModals();
   switchTab('dashboard');
   loadDashboard();
+  loadCallHistory();
+  el('refresh-calls-btn')?.addEventListener('click', loadCallHistory);
 }
 
 // ==================================================
@@ -191,26 +199,38 @@ function initSocketIO() {
   socket = io();
   socket.emit('authenticate', currentUser.id);
 
+  socket.on('online_users_list', userIds => {
+    userIds.forEach(id => {
+      const userId = parseInt(id);
+      onlineUserIdsSet.add(userId);
+      updateUserPresenceUI(userId, true);
+    });
+  });
+
   socket.on('receive_message', msg => {
     if (activeChat.partnerId === msg.sender_id) {
-      appendChatMessage(msg.message, 'incoming');
+      if (msg.is_call_log) {
+        appendChatMessage(msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
+      } else {
+        appendChatMessage(msg.message, 'incoming');
+      }
     } else {
-      toast(`💬 ${msg.sender_name}: ${msg.message.slice(0, 60)}...`, 'info');
+      if (!msg.is_call_log) {
+        toast(`💬 ${msg.sender_name}: ${msg.message.slice(0, 60)}...`, 'info');
+      }
     }
   });
 
   socket.on('user_online', userId => {
-    if (activeChat.partnerId === userId) {
-      const statusDot = el('chat-partner-status');
-      if (statusDot) { statusDot.textContent = ''; statusDot.className = 'online-dot online'; }
-    }
+    userId = parseInt(userId);
+    onlineUserIdsSet.add(userId);
+    updateUserPresenceUI(userId, true);
   });
 
   socket.on('user_offline', userId => {
-    if (activeChat.partnerId === userId) {
-      const statusDot = el('chat-partner-status');
-      if (statusDot) { statusDot.textContent = ''; statusDot.className = 'online-dot offline'; }
-    }
+    userId = parseInt(userId);
+    onlineUserIdsSet.delete(userId);
+    updateUserPresenceUI(userId, false);
   });
 
   socket.on('code_update', ({ code, userId }) => {
@@ -227,7 +247,7 @@ function initSocketIO() {
     }
   });
 
-  // WebRTC signaling
+  // WebRTC signaling (legacy fallback)
   socket.on('webrtc_offer', async ({ offer, from }) => {
     if (!peerConnection) initPeerConnection(from);
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -243,6 +263,171 @@ function initSocketIO() {
   socket.on('webrtc_ice', async ({ candidate }) => {
     if (peerConnection) {
       try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+    }
+  });
+
+  // WebRTC 1-on-1 Signaling Enhanced Flow
+  socket.on('incoming_call', ({ callerId, callerName, offer }) => {
+    show('incoming-call-modal');
+    el('incoming-call-title').textContent = 'Incoming Class Call';
+    el('incoming-call-msg').textContent = `${callerName} is inviting you to a live 1-on-1 session.`;
+    
+    el('accept-call-btn').onclick = async () => {
+      hide('incoming-call-modal');
+      await acceptDirectCall(callerId, callerName, offer);
+    };
+    
+    el('decline-call-btn').onclick = () => {
+      hide('incoming-call-modal');
+      socket.emit('decline_call', { to: callerId });
+    };
+  });
+
+  socket.on('call_declined', () => {
+    toast('Call declined by peer.', 'warning');
+    endCallLocal();
+  });
+
+  socket.on('call_accepted', async ({ answer }) => {
+    toast('Call accepted! Connecting...', 'success');
+    if (peerConnection) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  });
+
+  socket.on('call_ended', () => {
+    toast('Call ended by peer.', 'info');
+    endCallLocal();
+  });
+
+  socket.on('call_cancelled', () => {
+    hide('incoming-call-modal');
+    toast('Call cancelled by caller.', 'info');
+    endCallLocal();
+  });
+
+  // WebRTC Group Calling Signaling (Mesh Network)
+  socket.on('incoming_group_call', ({ roomId, callerId, callerName, invitedUserIds }) => {
+    show('incoming-call-modal');
+    el('incoming-call-title').textContent = 'Incoming Group Call';
+    el('incoming-call-msg').textContent = `${callerName} is inviting you to a Group Classroom.`;
+    
+    el('accept-call-btn').onclick = async () => {
+      hide('incoming-call-modal');
+      await joinGroupCall(roomId, callerName);
+    };
+    
+    el('decline-call-btn').onclick = () => {
+      hide('incoming-call-modal');
+      socket.emit('decline_group_call', { initiatorId: callerId });
+    };
+  });
+
+  socket.on('group_user_joined', async ({ userId, socketId, userName }) => {
+    toast(`👋 ${userName} joined the class!`, 'success');
+    const pc = createGroupPeerConnection(socketId, userId, userName, true);
+    groupPeerConnections[socketId] = pc;
+    
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('group_signal', { 
+        toSocketId: socketId, 
+        signalData: { 
+          type: 'offer', 
+          offer,
+          senderName: currentUser.fullname || currentUser.username
+        } 
+      });
+    } catch (e) {
+      console.error('Failed to create offer for new peer:', e);
+    }
+  });
+
+  socket.on('group_signal', async ({ fromSocketId, fromUserId, signalData }) => {
+    if (signalData.type === 'offer') {
+      const pc = createGroupPeerConnection(fromSocketId, fromUserId, signalData.senderName || 'Peer', false);
+      groupPeerConnections[fromSocketId] = pc;
+      
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('group_signal', { 
+          toSocketId: fromSocketId, 
+          signalData: { 
+            type: 'answer', 
+            answer,
+            senderName: currentUser.fullname || currentUser.username
+          } 
+        });
+      } catch (e) {
+        console.error('Failed to handle group offer:', e);
+      }
+    } else if (signalData.type === 'answer') {
+      const pc = groupPeerConnections[fromSocketId];
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(signalData.answer));
+        } catch (e) {
+          console.error('Failed to set remote description answer:', e);
+        }
+      }
+    } else if (signalData.type === 'ice-candidate') {
+      const pc = groupPeerConnections[fromSocketId];
+      if (pc) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+        } catch (e) {
+          // Ignore candidate errors
+        }
+      }
+    }
+  });
+
+  socket.on('group_user_left', ({ socketId, userId }) => {
+    if (groupPeerConnections[socketId]) {
+      groupPeerConnections[socketId].close();
+      delete groupPeerConnections[socketId];
+    }
+    el(`feed_${socketId}`)?.remove();
+  });
+
+  socket.on('group_participants_update', (participants) => {
+    groupParticipants = participants;
+    updateGroupParticipantsList();
+  });
+}
+
+function updateUserPresenceUI(userId, isOnline) {
+  userId = parseInt(userId);
+  if (activeChat.partnerId === userId) {
+    const statusDot = el('chat-partner-status');
+    if (statusDot) {
+      statusDot.textContent = isOnline ? 'online' : 'offline';
+      statusDot.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
+    }
+  }
+  if (el('peer-profile-modal') && !el('peer-profile-modal').classList.contains('hidden')) {
+    const modalChatBtn = el('modal-chat-btn');
+    if (modalChatBtn && parseInt(modalChatBtn.dataset.id) === userId) {
+      const statusDot = el('modal-peer-status');
+      if (statusDot) {
+        statusDot.textContent = isOnline ? 'online' : 'offline';
+        statusDot.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
+      }
+    }
+  }
+  
+  const userCards = qsa('.peer-card');
+  userCards.forEach(card => {
+    const viewBtn = card.querySelector('[data-action="profile"]');
+    if (viewBtn && parseInt(viewBtn.dataset.id) === userId) {
+      let badge = card.querySelector('.match-badge');
+      if (badge) {
+        badge.style.border = isOnline ? '1px solid var(--emerald)' : '';
+        badge.innerHTML = isOnline ? '🟢 Online' : (badge.classList.contains('perfect') ? '⚡ Perfect Match' : badge.classList.contains('partial') ? '🤝 Partial Match' : '👤 Peer');
+      }
     }
   });
 }
@@ -686,16 +871,27 @@ function initChatPanel() {
     const msg = el('chat-message-input').value.trim();
     if (!msg || !activeChat.partnerId) return;
     el('chat-message-input').value = '';
-    try {
-      await api('POST', '/api/messages', { receiver_id: activeChat.partnerId, message: msg });
-      appendChatMessage(msg, 'outgoing');
+    
+    appendChatMessage(msg, 'outgoing');
+    
+    if (socket && socket.connected) {
       socket.emit('send_message', { receiver_id: activeChat.partnerId, message: msg, sender_name: currentUser.username });
-    } catch {}
+    } else {
+      try {
+        await api('POST', '/api/messages', { receiver_id: activeChat.partnerId, message: msg });
+      } catch (err) {
+        toast('Failed to send message: connection lost.', 'error');
+      }
+    }
   });
 
   el('start-call-btn')?.addEventListener('click', () => {
     if (!activeChat.partnerId) return;
     openVideoCall(activeChat.partnerId, activeChat.partnerName);
+  });
+
+  el('start-group-call-btn')?.addEventListener('click', () => {
+    openGroupCallModal();
   });
 
   el('ai-help-btn')?.addEventListener('click', () => {
@@ -725,7 +921,11 @@ async function loadChatHistory(peerId) {
   try {
     const data = await api('GET', `/api/messages/${peerId}`);
     data.messages.forEach(m => {
-      appendChatMessage(m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming');
+      if (m.is_call_log) {
+        appendChatMessage(m.message, m.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
+      } else {
+        appendChatMessage(m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming');
+      }
     });
   } catch {}
 }
@@ -734,7 +934,11 @@ function appendChatMessage(text, direction) {
   const log = el('chat-messages-log');
   const div = document.createElement('div');
   div.className = `msg-bubble ${direction}`;
-  div.textContent = text;
+  if (direction.includes('call-log')) {
+    div.innerHTML = text;
+  } else {
+    div.textContent = text;
+  }
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
@@ -806,6 +1010,13 @@ function initCallUI() {
   el('call-toggle-audio')?.addEventListener('click', () => toggleTrack('audio'));
   el('call-toggle-video')?.addEventListener('click', () => toggleTrack('video'));
   el('call-toggle-screen')?.addEventListener('click', shareScreen);
+  
+  el('show-participants-btn')?.addEventListener('click', () => {
+    el('classroom-participants-drawer').classList.toggle('hidden');
+  });
+  el('close-participants-btn')?.addEventListener('click', () => {
+    el('classroom-participants-drawer').classList.add('hidden');
+  });
 
   el('tab-code-editor-btn')?.addEventListener('click', () => switchWorkspace('code-editor'));
   el('tab-whiteboard-btn')?.addEventListener('click', () => switchWorkspace('whiteboard'));
@@ -830,10 +1041,14 @@ function switchWorkspace(tab) {
 }
 
 async function openVideoCall(peerId, peerName, sessionId = null) {
+  isGroupCall = false;
+  activeCallPartnerId = peerId;
   activeChat.partnerId = peerId;
   activeChat.partnerName = peerName;
   el('classroom-peer-name').textContent = peerName;
   el('call-overlay').classList.remove('hidden');
+  el('classroom-video-feeds').classList.remove('group-grid');
+  el('classroom-participants-drawer').classList.add('hidden');
 
   startCallTimer();
 
@@ -845,17 +1060,61 @@ async function openVideoCall(peerId, peerName, sessionId = null) {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     el('local-video').srcObject = localStream;
     hide('local-mock-stream');
-    initPeerConnection(peerId);
-
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit('webrtc_offer', { offer, to: peerId });
   } catch (e) {
     show('local-mock-stream');
     toast('Camera/mic unavailable — running in screen-share/text mode.', 'warning');
   }
 
-  toast(`🎓 Classroom session started with ${peerName}!`, 'success');
+  initPeerConnection(peerId);
+
+  try {
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    
+    socket.emit('call_user', {
+      to: peerId,
+      offer: offer,
+      senderName: currentUser.fullname || currentUser.username
+    });
+  } catch (e) {
+    console.error("Failed to create offer:", e);
+  }
+
+  toast(`📞 Classroom call placed to ${peerName}!`, 'info');
+}
+
+async function acceptDirectCall(callerId, callerName, offer) {
+  isGroupCall = false;
+  activeCallPartnerId = callerId;
+  activeChat.partnerId = callerId;
+  activeChat.partnerName = callerName;
+  el('classroom-peer-name').textContent = callerName;
+  el('call-overlay').classList.remove('hidden');
+  el('classroom-video-feeds').classList.remove('group-grid');
+  el('classroom-participants-drawer').classList.add('hidden');
+  
+  startCallTimer();
+  
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    el('local-video').srcObject = localStream;
+    hide('local-mock-stream');
+  } catch (e) {
+    show('local-mock-stream');
+    toast('Camera/mic unavailable.', 'warning');
+  }
+  
+  initPeerConnection(callerId);
+  
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    
+    socket.emit('accept_call', { to: callerId, answer: answer });
+  } catch (e) {
+    console.error("Failed to accept call:", e);
+  }
 }
 
 function initPeerConnection(peerId) {
@@ -926,17 +1185,337 @@ function startCallTimer() {
 }
 
 async function endCall() {
+  if (isGroupCall) {
+    socket.emit('leave_group_room', { roomId: groupRoomId });
+    for (const id in groupPeerConnections) {
+      groupPeerConnections[id].close();
+    }
+    groupPeerConnections = {};
+  } else {
+    if (activeCallPartnerId) {
+      socket.emit('hang_up', {
+        to: activeCallPartnerId,
+        callerId: currentUser.id,
+        receiverId: activeCallPartnerId
+      });
+    }
+  }
+  
+  endCallLocal();
+  toast('Session ended.', 'success');
+  await loadCallHistory();
+}
+
+function endCallLocal() {
   clearInterval(callTimer);
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (peerConnection) { peerConnection.close(); peerConnection = null; }
-  el('remote-video').srcObject = null;
-  el('local-video').srcObject = null;
-  show('remote-mock-stream');
-  show('local-mock-stream');
+  
+  for (const id in groupPeerConnections) {
+    groupPeerConnections[id].close();
+  }
+  groupPeerConnections = {};
+  
+  const videoGrid = el('classroom-video-feeds');
+  videoGrid.innerHTML = `
+    <div class="video-feed remote-feed">
+      <video id="remote-video" autoplay playsinline></video>
+      <div class="feed-mock" id="remote-mock-stream">
+        <div class="feed-mock-icon"><i class="fa-solid fa-user-graduate"></i></div>
+        <p>Waiting for peer to connect...</p>
+      </div>
+      <div class="feed-label" id="remote-video-label"><i class="fa-solid fa-circle live-dot"></i> Peer Camera</div>
+    </div>
+    <div class="video-feed local-feed">
+      <video id="local-video" autoplay playsinline muted></video>
+      <div class="feed-mock" id="local-mock-stream">
+        <div class="feed-mock-icon"><i class="fa-solid fa-video-slash"></i></div>
+        <p>Camera Off</p>
+      </div>
+      <div class="feed-label">You</div>
+    </div>
+  `;
+  
   el('call-overlay').classList.add('hidden');
   el('call-timer').textContent = '00:00';
-  toast('Session ended. Great teaching!', 'success');
-  await loadSessions();
+  isGroupCall = false;
+  groupRoomId = null;
+  activeCallPartnerId = null;
+  loadSessions();
+}
+
+// ==================================================
+//  GROUP CALL CLASSROOM & SIGNALING LOGIC
+// ==================================================
+async function startGroupCall(invitedUsers) {
+  isGroupCall = true;
+  groupRoomId = 'group_' + Date.now();
+  el('classroom-peer-name').textContent = 'Group Class';
+  el('call-overlay').classList.remove('hidden');
+  el('classroom-participants-drawer').classList.remove('hidden');
+  
+  const videoGrid = el('classroom-video-feeds');
+  videoGrid.innerHTML = ''; 
+  videoGrid.classList.add('group-grid');
+  
+  const localWrapper = document.createElement('div');
+  localWrapper.className = 'video-feed';
+  localWrapper.id = 'feed_local';
+  localWrapper.innerHTML = `
+    <video id="local-video" autoplay playsinline muted></video>
+    <div class="feed-mock" id="local-mock-stream" style="display: none;">
+      <div class="feed-mock-icon"><i class="fa-solid fa-video-slash"></i></div>
+      <p>Camera Off</p>
+    </div>
+    <div class="feed-label">You (Host)</div>
+  `;
+  videoGrid.appendChild(localWrapper);
+
+  startCallTimer();
+  
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    el('local-video').srcObject = localStream;
+    el('local-mock-stream').style.display = 'none';
+  } catch (e) {
+    el('local-mock-stream').style.display = 'flex';
+    toast('Camera/mic unavailable.', 'warning');
+  }
+
+  socket.emit('group_call_invite', {
+    roomId: groupRoomId,
+    invitedUsers,
+    senderName: currentUser.fullname || currentUser.username
+  });
+  
+  socket.emit('join_group_room', {
+    roomId: groupRoomId,
+    userName: currentUser.fullname || currentUser.username
+  });
+
+  groupParticipants = [
+    { userId: currentUser.id, userName: currentUser.fullname || currentUser.username, status: 'host' }
+  ];
+  invitedUsers.forEach(u => {
+    groupParticipants.push({ userId: u.id, userName: u.name, status: 'invited' });
+  });
+  
+  updateGroupParticipantsList();
+  toast('Group call started!', 'success');
+}
+
+async function joinGroupCall(roomId, initiatorName) {
+  isGroupCall = true;
+  groupRoomId = roomId;
+  el('classroom-peer-name').textContent = 'Group Class';
+  el('call-overlay').classList.remove('hidden');
+  el('classroom-participants-drawer').classList.remove('hidden');
+  
+  const videoGrid = el('classroom-video-feeds');
+  videoGrid.innerHTML = ''; 
+  videoGrid.classList.add('group-grid');
+  
+  const localWrapper = document.createElement('div');
+  localWrapper.className = 'video-feed';
+  localWrapper.id = 'feed_local';
+  localWrapper.innerHTML = `
+    <video id="local-video" autoplay playsinline muted></video>
+    <div class="feed-mock" id="local-mock-stream" style="display: none;">
+      <div class="feed-mock-icon"><i class="fa-solid fa-video-slash"></i></div>
+      <p>Camera Off</p>
+    </div>
+    <div class="feed-label">You</div>
+  `;
+  videoGrid.appendChild(localWrapper);
+
+  startCallTimer();
+  
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    el('local-video').srcObject = localStream;
+    el('local-mock-stream').style.display = 'none';
+  } catch (e) {
+    el('local-mock-stream').style.display = 'flex';
+    toast('Camera/mic unavailable.', 'warning');
+  }
+
+  socket.emit('join_group_room', {
+    roomId,
+    userName: currentUser.fullname || currentUser.username
+  });
+  
+  groupParticipants = [
+    { userId: currentUser.id, userName: currentUser.fullname || currentUser.username, status: 'connected' }
+  ];
+  updateGroupParticipantsList();
+}
+
+function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isInitiator) {
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+  
+  pc.ontrack = e => {
+    renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e.streams[0]);
+  };
+  
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit('group_signal', {
+        toSocketId: peerSocketId,
+        signalData: { type: 'ice-candidate', candidate: e.candidate }
+      });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connected') {
+      const idx = groupParticipants.findIndex(p => p.userId === peerUserId);
+      if (idx !== -1) {
+        groupParticipants[idx].status = 'connected';
+        updateGroupParticipantsList();
+      }
+    }
+  };
+
+  return pc;
+}
+
+function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, stream) {
+  const videoGrid = el('classroom-video-feeds');
+  let peerFeed = el(`feed_${peerSocketId}`);
+  
+  if (!peerFeed) {
+    peerFeed = document.createElement('div');
+    peerFeed.className = 'video-feed';
+    peerFeed.id = `feed_${peerSocketId}`;
+    peerFeed.innerHTML = `
+      <video id="video_${peerSocketId}" autoplay playsinline></video>
+      <div class="feed-label"><i class="fa-solid fa-circle live-dot"></i> ${peerUserName}</div>
+    `;
+    videoGrid.appendChild(peerFeed);
+  }
+  
+  const videoEl = el(`video_${peerSocketId}`);
+  if (videoEl) {
+    videoEl.srcObject = stream;
+  }
+  
+  const pIdx = groupParticipants.findIndex(p => p.userId === peerUserId);
+  if (pIdx !== -1) {
+    groupParticipants[pIdx].status = 'connected';
+  } else {
+    groupParticipants.push({ userId: peerUserId, userName: peerUserName, status: 'connected' });
+  }
+  updateGroupParticipantsList();
+}
+
+function updateGroupParticipantsList() {
+  const list = el('classroom-participants-list');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  let count = 0;
+  
+  groupParticipants.forEach(p => {
+    if (p.status === 'connected' || p.status === 'host') count++;
+    
+    const item = document.createElement('li');
+    item.className = 'participant-item';
+    item.innerHTML = `
+      <span class="participant-name">${p.userName}</span>
+      <span class="participant-badge ${p.status}">${p.status}</span>
+    `;
+    list.appendChild(item);
+  });
+  
+  el('participants-count').textContent = count;
+}
+
+function openGroupCallModal() {
+  show('group-call-modal');
+  hide('group-call-error');
+  
+  const listContainer = el('group-call-peers-list');
+  if (!listContainer) return;
+  
+  api('GET', '/api/users/explore')
+    .then(data => {
+      const onlinePeers = data.users.filter(u => u.id !== currentUser.id && onlineUserIdsSet.has(u.id));
+      listContainer.innerHTML = '';
+      
+      if (!onlinePeers.length) {
+        listContainer.innerHTML = '<div class="skills-empty-hint">No matched peers are online right now.</div>';
+        el('launch-group-call-btn').disabled = true;
+        return;
+      }
+      
+      onlinePeers.forEach(peer => {
+        const item = document.createElement('label');
+        item.className = 'invite-peer-checkbox-item';
+        const displayName = peer.fullname || peer.username;
+        item.innerHTML = `
+          <input type="checkbox" name="invite-peer" value="${peer.id}" data-name="${displayName}">
+          <span><strong>${displayName}</strong> (${peer.teach_skills || 'Tutor'})</span>
+        `;
+        item.querySelector('input').addEventListener('change', () => {
+          const checked = document.querySelectorAll('input[name="invite-peer"]:checked').length;
+          el('launch-group-call-btn').disabled = checked === 0;
+        });
+        listContainer.appendChild(item);
+      });
+      el('launch-group-call-btn').disabled = true;
+    })
+    .catch(() => {
+      listContainer.innerHTML = '<div class="skills-empty-hint">Error loading online peers list.</div>';
+    });
+}
+
+async function loadCallHistory() {
+  const container = el('call-history-list');
+  if (!container) return;
+  
+  try {
+    const data = await api('GET', '/api/calls/history');
+    const logs = data.logs;
+    if (!logs || !logs.length) {
+      container.innerHTML = '<div class="empty-state-card"><i class="fa-solid fa-phone"></i><p>No recent classes logged.</p></div>';
+      return;
+    }
+    
+    container.innerHTML = '';
+    logs.forEach(log => {
+      const isCaller = log.caller_id === currentUser.id;
+      const peerName = isCaller ? log.receiver_name : log.caller_name;
+      const item = document.createElement('div');
+      item.className = 'call-history-item';
+      
+      const dateStr = new Date(log.timestamp).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      const typeIcon = log.call_type === 'group' ? '<i class="fa-solid fa-users"></i> Group Class' : '<i class="fa-solid fa-user"></i> 1-on-1 Class';
+      
+      item.innerHTML = `
+        <div class="call-history-meta">
+          <div class="call-history-peers">${peerName}</div>
+          <div class="call-history-type">${typeIcon}</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          <span class="call-history-status ${log.status}">${log.status}</span>
+          <span class="call-history-time">${dateStr}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state-card"><i class="fa-solid fa-triangle-exclamation"></i><p>Failed to load history.</p></div>';
+  }
 }
 
 // ==================================================
@@ -1041,6 +1620,22 @@ function initModals() {
   el('close-book-modal-btn')?.addEventListener('click', () => hide('book-modal'));
   el('cancel-book-modal-btn')?.addEventListener('click', () => hide('book-modal'));
   el('book-modal')?.addEventListener('click', e => { if (e.target === el('book-modal')) hide('book-modal'); });
+
+  el('close-group-call-btn')?.addEventListener('click', () => hide('group-call-modal'));
+  el('cancel-group-call-btn')?.addEventListener('click', () => hide('group-call-modal'));
+  el('group-call-modal')?.addEventListener('click', e => { if (e.target === el('group-call-modal')) hide('group-call-modal'); });
+
+  el('group-call-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    hide('group-call-modal');
+    const checkedBoxes = document.querySelectorAll('input[name="invite-peer"]:checked');
+    const invitedUsers = Array.from(checkedBoxes).map(cb => ({
+      id: parseInt(cb.value),
+      name: cb.dataset.name
+    }));
+    if (!invitedUsers.length) return;
+    await startGroupCall(invitedUsers);
+  });
 
   el('book-session-form')?.addEventListener('submit', async e => {
     e.preventDefault();
