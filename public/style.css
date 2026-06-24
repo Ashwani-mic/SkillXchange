@@ -1739,15 +1739,21 @@ select option, select optgroup {
     flex-direction: row;
   }
   .video-feeds:not(.group-grid) .remote-feed,
-  .video-feeds:not(.group-grid) .local-feed {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    bottom: auto;
-    right: auto;
-    box-shadow: none;
-    border: 1px solid var(--border-subtle);
-    flex: 1;
+  .video-feeds:not(.group-grid) .local-feed,
+  .draggable-pip {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    right: auto !important;
+    box-shadow: none !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 14px !important;
+    flex: 1 !important;
+    resize: none !important;
+    transform: none !important;
   }
   .side-panel { width: 100%; }
   .ai-panel { right: 0; width: 100%; }
