@@ -22,7 +22,18 @@ let groupPeerConnections = {}; // socketId -> RTCPeerConnection
 let groupParticipants = []; // array of { userId, socketId, userName, status }
 const onlineUserIdsSet = new Set();
 
-const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+// WebRTC ICE Candidate Queues to prevent race conditions during signaling
+let globalIceQueue = [];
+let groupIceQueues = {}; // peerSocketId -> array of candidates
+
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' }
+  ]
+};
 
 // ==================================================
 //  DOM HELPERS
@@ -257,12 +268,22 @@ function initSocketIO() {
   });
 
   socket.on('webrtc_answer', async ({ answer }) => {
-    if (peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    if (peerConnection) {
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        await drainIceQueue(peerConnection);
+      } catch (e) {
+        console.error('Failed to set remote description answer:', e);
+      }
+    }
   });
 
   socket.on('webrtc_ice', async ({ candidate }) => {
     if (peerConnection) {
-      try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+      await addIceCandidateSafely(peerConnection, candidate);
+    } else {
+      globalIceQueue.push(candidate);
+      console.log("Cached ICE candidate in global queue:", candidate);
     }
   });
 
@@ -291,7 +312,12 @@ function initSocketIO() {
   socket.on('call_accepted', async ({ answer }) => {
     toast('Call accepted! Connecting...', 'success');
     if (peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        await drainIceQueue(peerConnection);
+      } catch (e) {
+        console.error('Failed to set remote description answer:', e);
+      }
     }
   });
 
@@ -351,6 +377,7 @@ function initSocketIO() {
       
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
+        await drainIceQueue(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('group_signal', { 
@@ -369,6 +396,7 @@ function initSocketIO() {
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(signalData.answer));
+          await drainIceQueue(pc);
         } catch (e) {
           console.error('Failed to set remote description answer:', e);
         }
@@ -376,11 +404,10 @@ function initSocketIO() {
     } else if (signalData.type === 'ice-candidate') {
       const pc = groupPeerConnections[fromSocketId];
       if (pc) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-        } catch (e) {
-          // Ignore candidate errors
-        }
+        await addIceCandidateSafely(pc, signalData.candidate);
+      } else {
+        if (!groupIceQueues[fromSocketId]) groupIceQueues[fromSocketId] = [];
+        groupIceQueues[fromSocketId].push(signalData.candidate);
       }
     }
   });
@@ -1003,6 +1030,40 @@ async function sendToAI(message) {
 }
 
 // ==================================================
+//  VIDEO CALL (WebRTC) HELPER FUNCTIONS
+// ==================================================
+async function addIceCandidateSafely(pc, candidate) {
+  if (!candidate) return;
+  if (pc.remoteDescription && pc.remoteDescription.type) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Successfully added ICE candidate:", candidate.candidate);
+    } catch (e) {
+      console.warn("Failed to add ICE candidate:", e);
+    }
+  } else {
+    if (!pc.iceQueue) pc.iceQueue = [];
+    pc.iceQueue.push(candidate);
+    console.log("Queued ICE candidate (remote description not set yet):", candidate.candidate);
+  }
+}
+
+async function drainIceQueue(pc) {
+  if (pc.iceQueue && pc.iceQueue.length) {
+    console.log(`Draining ${pc.iceQueue.length} queued ICE candidates...`);
+    while (pc.iceQueue.length > 0) {
+      const candidate = pc.iceQueue.shift();
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("Successfully added queued ICE candidate:", candidate.candidate);
+      } catch (e) {
+        console.warn("Failed to add queued ICE candidate:", e);
+      }
+    }
+  }
+}
+
+// ==================================================
 //  VIDEO CALL (WebRTC)
 // ==================================================
 function initCallUI() {
@@ -1108,6 +1169,7 @@ async function acceptDirectCall(callerId, callerName, offer) {
   
   try {
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    await drainIceQueue(peerConnection);
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
     
@@ -1119,21 +1181,45 @@ async function acceptDirectCall(callerId, callerName, offer) {
 
 function initPeerConnection(peerId) {
   peerConnection = new RTCPeerConnection(ICE_SERVERS);
+  peerConnection.remoteDescriptionSet = false;
+  peerConnection.iceQueue = [...globalIceQueue];
+  globalIceQueue = []; // clear global queue
 
   if (localStream) localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
 
   peerConnection.ontrack = e => {
-    el('remote-video').srcObject = e.streams[0];
-    hide('remote-mock-stream');
+    console.log("OnTrack event received:", e);
+    const remoteVideo = el('remote-video');
+    if (remoteVideo) {
+      if (e.streams && e.streams[0]) {
+        remoteVideo.srcObject = e.streams[0];
+      } else {
+        if (!remoteVideo.srcObject) {
+          remoteVideo.srcObject = new MediaStream();
+        }
+        remoteVideo.srcObject.addTrack(e.track);
+      }
+      hide('remote-mock-stream');
+    }
   };
 
   peerConnection.onicecandidate = e => {
-    if (e.candidate) socket.emit('webrtc_ice', { candidate: e.candidate, to: peerId });
+    if (e.candidate) {
+      console.log("Sending ICE candidate to peer:", e.candidate.candidate);
+      socket.emit('webrtc_ice', { candidate: e.candidate, to: peerId });
+    }
+  };
+
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log("ICE Connection State:", peerConnection.iceConnectionState);
   };
 
   peerConnection.onconnectionstatechange = () => {
+    console.log("Connection State Changed:", peerConnection.connectionState);
     if (peerConnection.connectionState === 'connected') {
       toast('🔗 Peer connected!', 'success');
+    } else if (peerConnection.connectionState === 'failed') {
+      toast('❌ Connection failed. Retrying...', 'error');
     }
   };
 }
@@ -1215,6 +1301,9 @@ function endCallLocal() {
     groupPeerConnections[id].close();
   }
   groupPeerConnections = {};
+  
+  globalIceQueue = [];
+  groupIceQueues = {};
   
   const videoGrid = el('classroom-video-feeds');
   videoGrid.innerHTML = `
@@ -1352,13 +1441,17 @@ async function joinGroupCall(roomId, initiatorName) {
 
 function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isInitiator) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
+  pc.remoteDescriptionSet = false;
+  pc.iceQueue = groupIceQueues[peerSocketId] || [];
+  delete groupIceQueues[peerSocketId];
   
   if (localStream) {
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
   }
   
   pc.ontrack = e => {
-    renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e.streams[0]);
+    console.log("Group OnTrack event received from peer:", peerUserName, e);
+    renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e);
   };
   
   pc.onicecandidate = e => {
@@ -1370,7 +1463,12 @@ function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isIni
     }
   };
 
+  pc.oniceconnectionstatechange = () => {
+    console.log(`Group ICE State for ${peerUserName}:`, pc.iceConnectionState);
+  };
+
   pc.onconnectionstatechange = () => {
+    console.log(`Group Connection State for ${peerUserName}:`, pc.connectionState);
     if (pc.connectionState === 'connected') {
       const idx = groupParticipants.findIndex(p => p.userId === peerUserId);
       if (idx !== -1) {
@@ -1383,7 +1481,7 @@ function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isIni
   return pc;
 }
 
-function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, stream) {
+function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e) {
   const videoGrid = el('classroom-video-feeds');
   let peerFeed = el(`feed_${peerSocketId}`);
   
@@ -1400,7 +1498,14 @@ function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, stream)
   
   const videoEl = el(`video_${peerSocketId}`);
   if (videoEl) {
-    videoEl.srcObject = stream;
+    if (e.streams && e.streams[0]) {
+      videoEl.srcObject = e.streams[0];
+    } else {
+      if (!videoEl.srcObject) {
+        videoEl.srcObject = new MediaStream();
+      }
+      videoEl.srcObject.addTrack(e.track);
+    }
   }
   
   const pIdx = groupParticipants.findIndex(p => p.userId === peerUserId);
