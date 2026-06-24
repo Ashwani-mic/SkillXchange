@@ -1683,7 +1683,28 @@ select option, select optgroup {
   .hero-stats { flex-direction: column; gap: 16px; }
   .hero-stat-divider { display: none; }
   .main-content { padding: 16px; }
-  .app-header-nav { display: none; }
+  .app-header-nav { 
+    display: flex; 
+    position: fixed; 
+    bottom: 0; 
+    left: 0; 
+    right: 0; 
+    background: var(--surface);
+    border-top: 1px solid var(--border-subtle);
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    z-index: 1000;
+    justify-content: space-around;
+  }
+  .header-nav-btn {
+    flex-direction: column;
+    font-size: 0.75rem;
+    gap: 4px;
+    padding: 6px;
+    flex: 1;
+  }
+  .app-body {
+    padding-bottom: 70px;
+  }
   .side-panel { width: 100%; }
   .ai-panel { right: 0; width: 100%; }
   .ai-panel.closed { transform: translateX(calc(100%)); }
