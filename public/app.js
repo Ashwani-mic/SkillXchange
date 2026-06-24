@@ -1266,8 +1266,16 @@ function startCallTimer() {
     callSeconds++;
     const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
     const s = String(callSeconds % 60).padStart(2, '0');
-    el('call-timer').textContent = `${m}:${s}`;
+    if (el('call-timer')) el('call-timer').textContent = `${m}:${s}`;
   }, 1000);
+
+  setTimeout(() => {
+    const localFeed = document.querySelector('.local-feed');
+    if (localFeed) {
+      localFeed.classList.add('draggable-pip');
+      if (typeof makeDraggable === 'function') makeDraggable(localFeed);
+    }
+  }, 100);
 }
 
 async function endCall() {
@@ -1830,3 +1838,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     hide('app-view');
   }
 });
+
+// Utility: Make Element Draggable
+function makeDraggable(el) {
+  if (!el) return;
+  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+  
+  el.onmousedown = dragMouseDown;
+
+  function dragMouseDown(e) {
+    const rect = el.getBoundingClientRect();
+    // Prevent drag if clicking the bottom right resize corner
+    if (e.clientX > rect.right - 20 && e.clientY > rect.bottom - 20) return;
+    
+    e = e || window.event;
+    e.preventDefault();
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    document.onmouseup = closeDragElement;
+    document.onmousemove = elementDrag;
+  }
+
+  function elementDrag(e) {
+    e = e || window.event;
+    e.preventDefault();
+    pos1 = pos3 - e.clientX;
+    pos2 = pos4 - e.clientY;
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    el.style.top = (el.offsetTop - pos2) + "px";
+    el.style.left = (el.offsetLeft - pos1) + "px";
+    el.style.bottom = 'auto';
+    el.style.right = 'auto';
+  }
+
+  function closeDragElement() {
+    document.onmouseup = null;
+    document.onmousemove = null;
+  }
+}
