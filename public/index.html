@@ -592,10 +592,16 @@
         <ul id="classroom-participants-list" class="participants-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
           <!-- Dynamically populated: A (Host, Connected), B (Invited), C (Connected) -->
         </ul>
+        <div id="classroom-drawer-actions" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: none;">
+          <button id="classroom-add-peer-btn" class="btn btn-primary btn-sm" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;"><i class="fa-solid fa-user-plus"></i> Invite More Peers</button>
+        </div>
       </div>
 
       <!-- Video Feeds -->
       <div class="video-feeds" id="classroom-video-feeds">
+        <button id="mobile-fullscreen-toggle" class="mobile-fullscreen-btn" title="Toggle Fullscreen">
+          <i class="fa-solid fa-expand"></i>
+        </button>
         <div class="video-feed remote-feed">
           <video id="remote-video" autoplay playsinline></video>
           <div class="feed-mock" id="remote-mock-stream">
@@ -767,6 +773,35 @@
         <button type="submit" class="btn btn-accent" id="launch-group-call-btn" disabled><i class="fa-solid fa-video"></i> Start Group Class</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- =================== MOBILE CLASSROOM OPTIONS BOTTOM SHEET =================== -->
+<div id="mobile-classroom-options-modal" class="mobile-options-overlay hidden">
+  <div class="mobile-options-sheet">
+    <div class="sheet-header">
+      <div class="sheet-indicator"></div>
+      <h4>Classroom Layout Options</h4>
+    </div>
+    <div class="sheet-body">
+      <button class="sheet-option-btn" id="opt-see-fullscreen">
+        <i class="fa-solid fa-expand"></i>
+        <div>
+          <strong>See Full Screen</strong>
+          <span>Hide editor/whiteboard to maximize video feeds</span>
+        </div>
+      </button>
+      <button class="sheet-option-btn" id="opt-minimize-screen">
+        <i class="fa-solid fa-compress"></i>
+        <div>
+          <strong>Minimize Screen</strong>
+          <span>Show editor/whiteboard with split video screen</span>
+        </div>
+      </button>
+      <button class="sheet-option-btn cancel-btn" id="opt-cancel">
+        Cancel
+      </button>
+    </div>
   </div>
 </div>
 

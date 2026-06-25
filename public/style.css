@@ -1371,6 +1371,29 @@ select option, select optgroup {
   min-height: 0;
 }
 
+.mobile-fullscreen-btn {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: white;
+  z-index: 100;
+  backdrop-filter: blur(5px);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+}
+.mobile-fullscreen-btn:active {
+  transform: scale(0.9);
+}
+
 .video-feeds {
   display: flex;
   position: relative;
@@ -1732,28 +1755,52 @@ select option, select optgroup {
     flex-direction: column;
     height: calc(100vh - var(--header-height) - 70px);
   }
+  .mobile-fullscreen-btn {
+    display: flex;
+  }
   .video-feeds {
     flex: 0 0 45%; 
+    transition: flex 0.3s ease;
+  }
+  .classroom-body.video-fullscreen-mode .video-feeds {
+    flex: 1 1 100%;
+  }
+  .classroom-body.video-fullscreen-mode .workspace-panel {
+    display: none !important;
   }
   .video-feeds:not(.group-grid) {
     flex-direction: row;
   }
-  .video-feeds:not(.group-grid) .remote-feed,
-  .video-feeds:not(.group-grid) .local-feed,
-  .draggable-pip {
+  .video-feeds:not(.group-grid) .remote-feed {
     position: relative !important;
     width: 100% !important;
     height: 100% !important;
-    top: auto !important;
-    left: auto !important;
-    bottom: auto !important;
-    right: auto !important;
-    box-shadow: none !important;
-    border: 1px solid var(--border-subtle) !important;
-    border-radius: 14px !important;
     flex: 1 !important;
+    border-radius: 14px !important;
+  }
+  .video-feeds:not(.group-grid) .local-feed,
+  .video-feeds:not(.group-grid) .draggable-pip {
+    position: absolute !important;
+    width: 100px !important;
+    height: 135px !important;
+    z-index: 50 !important;
+    border: 1.5px solid #fff !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+    border-radius: 10px !important;
     resize: none !important;
-    transform: none !important;
+    bottom: 12px;
+    right: 12px;
+    top: auto;
+    left: auto;
+  }
+  
+  /* Hides to prevent navbar overlap on small devices */
+  @media (max-width: 600px) {
+    .app-brand { display: none !important; }
+    .credits-label { display: none !important; }
+    #header-username { display: none !important; }
+    .header-user-pill { padding: 6px !important; gap: 0 !important; }
+    .header-user-pill i.fa-chevron-down { display: none !important; }
   }
   .side-panel { width: 100%; }
   .ai-panel { right: 0; width: 100%; }
@@ -1957,5 +2004,105 @@ select option, select optgroup {
   background: rgba(139,92,246,0.08) !important;
   border-color: rgba(139,92,246,0.3) !important;
   color: var(--primary-light) !important;
+}
+
+/* =================== MOBILE CLASSROOM OPTIONS BOTTOM SHEET =================== */
+.mobile-options-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  animation: fade-in 0.25s ease;
+}
+.mobile-options-sheet {
+  width: 100%;
+  max-width: 500px;
+  background: var(--surface);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 20px 20px 0 0;
+  padding: 16px 20px 32px;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.sheet-indicator {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  margin-bottom: 12px;
+}
+.sheet-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sheet-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.sheet-option-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(0.98);
+}
+.sheet-option-btn i {
+  font-size: 1.2rem;
+  color: var(--primary-light);
+  width: 24px;
+  text-align: center;
+}
+.sheet-option-btn div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sheet-option-btn strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.sheet-option-btn span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.sheet-option-btn.cancel-btn {
+  justify-content: center;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+  margin-top: 4px;
+}
+.sheet-option-btn.cancel-btn:active {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 

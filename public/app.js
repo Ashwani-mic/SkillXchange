@@ -1079,6 +1079,58 @@ function initCallUI() {
     el('classroom-participants-drawer').classList.add('hidden');
   });
 
+  // Invite More Peers button click handler
+  el('classroom-add-peer-btn')?.addEventListener('click', () => {
+    openGroupCallModal();
+  });
+
+  // Mobile Bottom-Sheet Options click/tap handlers
+  const videoFeeds = el('classroom-video-feeds');
+  const fullscreenToggle = el('mobile-fullscreen-toggle');
+  const optionsModal = el('mobile-classroom-options-modal');
+  
+  // Tap on video feeds opens bottom options sheet on mobile
+  videoFeeds?.addEventListener('click', e => {
+    if (window.innerWidth <= 900) {
+      if (e.target.closest('.mobile-fullscreen-btn') || e.target.closest('.local-feed') || e.target.closest('.draggable-pip')) {
+        return; // ignore these taps
+      }
+      show('mobile-classroom-options-modal');
+    }
+  });
+
+  // Floating button also opens the options sheet
+  fullscreenToggle?.addEventListener('click', e => {
+    e.stopPropagation();
+    show('mobile-classroom-options-modal');
+  });
+
+  // Bottom sheet option: See Full Screen
+  el('opt-see-fullscreen')?.addEventListener('click', () => {
+    el('classroom-body')?.classList.add('video-fullscreen-mode');
+    hide('mobile-classroom-options-modal');
+    toast('Switched to full screen video', 'info');
+  });
+
+  // Bottom sheet option: Minimize Screen
+  el('opt-minimize-screen')?.addEventListener('click', () => {
+    el('classroom-body')?.classList.remove('video-fullscreen-mode');
+    hide('mobile-classroom-options-modal');
+    toast('Classroom editor restored', 'info');
+  });
+
+  // Bottom sheet cancel option
+  el('opt-cancel')?.addEventListener('click', () => {
+    hide('mobile-classroom-options-modal');
+  });
+
+  // Click outside bottom sheet to close it
+  optionsModal?.addEventListener('click', e => {
+    if (e.target === optionsModal) {
+      hide('mobile-classroom-options-modal');
+    }
+  });
+
   el('tab-code-editor-btn')?.addEventListener('click', () => switchWorkspace('code-editor'));
   el('tab-whiteboard-btn')?.addEventListener('click', () => switchWorkspace('whiteboard'));
 
@@ -1110,6 +1162,10 @@ async function openVideoCall(peerId, peerName, sessionId = null) {
   el('call-overlay').classList.remove('hidden');
   el('classroom-video-feeds').classList.remove('group-grid');
   el('classroom-participants-drawer').classList.add('hidden');
+  
+  // Hide group-only add peer option
+  const drawerActions = el('classroom-drawer-actions');
+  if (drawerActions) drawerActions.style.display = 'none';
 
   startCallTimer();
 
@@ -1153,6 +1209,10 @@ async function acceptDirectCall(callerId, callerName, offer) {
   el('call-overlay').classList.remove('hidden');
   el('classroom-video-feeds').classList.remove('group-grid');
   el('classroom-participants-drawer').classList.add('hidden');
+  
+  // Hide group-only add peer option
+  const drawerActions = el('classroom-drawer-actions');
+  if (drawerActions) drawerActions.style.display = 'none';
   
   startCallTimer();
   
@@ -1351,12 +1411,16 @@ async function startGroupCall(invitedUsers) {
   el('call-overlay').classList.remove('hidden');
   el('classroom-participants-drawer').classList.remove('hidden');
   
+  // Show group-only add peer option
+  const drawerActions = el('classroom-drawer-actions');
+  if (drawerActions) drawerActions.style.display = 'block';
+  
   const videoGrid = el('classroom-video-feeds');
   videoGrid.innerHTML = ''; 
   videoGrid.classList.add('group-grid');
   
   const localWrapper = document.createElement('div');
-  localWrapper.className = 'video-feed';
+  localWrapper.className = 'video-feed local-feed';
   localWrapper.id = 'feed_local';
   localWrapper.innerHTML = `
     <video id="local-video" autoplay playsinline muted></video>
@@ -1408,12 +1472,16 @@ async function joinGroupCall(roomId, initiatorName) {
   el('call-overlay').classList.remove('hidden');
   el('classroom-participants-drawer').classList.remove('hidden');
   
+  // Show group-only add peer option
+  const drawerActions = el('classroom-drawer-actions');
+  if (drawerActions) drawerActions.style.display = 'block';
+  
   const videoGrid = el('classroom-video-feeds');
   videoGrid.innerHTML = ''; 
   videoGrid.classList.add('group-grid');
   
   const localWrapper = document.createElement('div');
-  localWrapper.className = 'video-feed';
+  localWrapper.className = 'video-feed local-feed';
   localWrapper.id = 'feed_local';
   localWrapper.innerHTML = `
     <video id="local-video" autoplay playsinline muted></video>
@@ -1447,6 +1515,27 @@ async function joinGroupCall(roomId, initiatorName) {
   updateGroupParticipantsList();
 }
 
+function createPeerFeedContainer(peerSocketId, peerUserName) {
+  const videoGrid = el('classroom-video-feeds');
+  if (!videoGrid) return;
+  
+  let peerFeed = el(`feed_${peerSocketId}`);
+  if (!peerFeed) {
+    peerFeed = document.createElement('div');
+    peerFeed.className = 'video-feed';
+    peerFeed.id = `feed_${peerSocketId}`;
+    peerFeed.innerHTML = `
+      <video id="video_${peerSocketId}" autoplay playsinline style="display: none; width: 100%; height: 100%; object-fit: cover;"></video>
+      <div class="feed-mock" id="mock_${peerSocketId}">
+        <div class="feed-mock-icon"><i class="fa-solid fa-user-graduate"></i></div>
+        <p>Connecting...</p>
+      </div>
+      <div class="feed-label" id="label_${peerSocketId}"><i class="fa-solid fa-circle live-dot"></i> ${peerUserName}</div>
+    `;
+    videoGrid.appendChild(peerFeed);
+  }
+}
+
 function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isInitiator) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   pc.remoteDescriptionSet = false;
@@ -1456,6 +1545,9 @@ function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isIni
   if (localStream) {
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
   }
+  
+  // Create video container placeholder immediately
+  createPeerFeedContainer(peerSocketId, peerUserName);
   
   pc.ontrack = e => {
     console.log("Group OnTrack event received from peer:", peerUserName, e);
@@ -1490,21 +1582,12 @@ function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isIni
 }
 
 function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e) {
-  const videoGrid = el('classroom-video-feeds');
-  let peerFeed = el(`feed_${peerSocketId}`);
-  
-  if (!peerFeed) {
-    peerFeed = document.createElement('div');
-    peerFeed.className = 'video-feed';
-    peerFeed.id = `feed_${peerSocketId}`;
-    peerFeed.innerHTML = `
-      <video id="video_${peerSocketId}" autoplay playsinline></video>
-      <div class="feed-label"><i class="fa-solid fa-circle live-dot"></i> ${peerUserName}</div>
-    `;
-    videoGrid.appendChild(peerFeed);
-  }
+  // Ensure the container exists
+  createPeerFeedContainer(peerSocketId, peerUserName);
   
   const videoEl = el(`video_${peerSocketId}`);
+  const mockEl = el(`mock_${peerSocketId}`);
+  
   if (videoEl) {
     if (e.streams && e.streams[0]) {
       videoEl.srcObject = e.streams[0];
@@ -1514,6 +1597,10 @@ function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e) {
       }
       videoEl.srcObject.addTrack(e.track);
     }
+    
+    // Show video and hide the mock placeholder
+    videoEl.style.display = 'block';
+    if (mockEl) mockEl.style.display = 'none';
   }
   
   const pIdx = groupParticipants.findIndex(p => p.userId === peerUserId);
@@ -1551,38 +1638,66 @@ function openGroupCallModal() {
   show('group-call-modal');
   hide('group-call-error');
   
+  // Set correct button label depending on active call state
+  const submitBtn = el('launch-group-call-btn');
+  if (submitBtn) {
+    if (isGroupCall && groupRoomId) {
+      submitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Send Invites';
+      el('group-call-modal').querySelector('h2').textContent = 'Invite Peers to Class';
+    } else {
+      submitBtn.innerHTML = '<i class="fa-solid fa-video"></i> Start Group Class';
+      el('group-call-modal').querySelector('h2').textContent = 'Start a Group Class';
+    }
+  }
+
   const listContainer = el('group-call-peers-list');
   if (!listContainer) return;
   
   api('GET', '/api/users/explore')
     .then(data => {
-      const onlinePeers = data.users.filter(u => u.id !== currentUser.id && onlineUserIdsSet.has(u.id));
+      // Sort users: online first, then offline
+      const sortedPeers = [...data.users]
+        .filter(u => u.id !== currentUser.id)
+        .sort((a, b) => {
+          const aOnline = onlineUserIdsSet.has(a.id) ? 1 : 0;
+          const bOnline = onlineUserIdsSet.has(b.id) ? 1 : 0;
+          return bOnline - aOnline;
+        });
+      
       listContainer.innerHTML = '';
       
-      if (!onlinePeers.length) {
-        listContainer.innerHTML = '<div class="skills-empty-hint">No matched peers are online right now.</div>';
-        el('launch-group-call-btn').disabled = true;
+      if (!sortedPeers.length) {
+        listContainer.innerHTML = '<div class="skills-empty-hint">No peers found in the network.</div>';
+        if (submitBtn) submitBtn.disabled = true;
         return;
       }
       
-      onlinePeers.forEach(peer => {
+      sortedPeers.forEach(peer => {
+        const isOnline = onlineUserIdsSet.has(peer.id);
         const item = document.createElement('label');
         item.className = 'invite-peer-checkbox-item';
+        if (!isOnline) {
+          item.style.opacity = '0.6';
+        }
         const displayName = peer.fullname || peer.username;
         item.innerHTML = `
           <input type="checkbox" name="invite-peer" value="${peer.id}" data-name="${displayName}">
-          <span><strong>${displayName}</strong> (${peer.teach_skills || 'Tutor'})</span>
+          <span style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <span class="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: ${isOnline ? 'var(--emerald)' : 'var(--text-muted)'}; display: inline-block;"></span>
+            <span><strong>${displayName}</strong> (${peer.teach_skills || 'Tutor'})</span>
+            <span style="margin-left: auto; font-size: 0.75rem; color: ${isOnline ? 'var(--emerald-light)' : 'var(--text-muted)'};">${isOnline ? 'Online' : 'Offline'}</span>
+          </span>
         `;
         item.querySelector('input').addEventListener('change', () => {
           const checked = document.querySelectorAll('input[name="invite-peer"]:checked').length;
-          el('launch-group-call-btn').disabled = checked === 0;
+          if (submitBtn) submitBtn.disabled = checked === 0;
         });
         listContainer.appendChild(item);
       });
-      el('launch-group-call-btn').disabled = true;
+      if (submitBtn) submitBtn.disabled = true;
     })
     .catch(() => {
-      listContainer.innerHTML = '<div class="skills-empty-hint">Error loading online peers list.</div>';
+      listContainer.innerHTML = '<div class="skills-empty-hint">Error loading peers list.</div>';
     });
 }
 
@@ -1747,7 +1862,25 @@ function initModals() {
       name: cb.dataset.name
     }));
     if (!invitedUsers.length) return;
-    await startGroupCall(invitedUsers);
+    
+    if (isGroupCall && groupRoomId) {
+      // Active call: Send mid-call invitations
+      socket.emit('group_call_invite', {
+        roomId: groupRoomId,
+        invitedUsers,
+        senderName: currentUser.fullname || currentUser.username
+      });
+      invitedUsers.forEach(u => {
+        if (!groupParticipants.some(p => p.userId === u.id)) {
+          groupParticipants.push({ userId: u.id, userName: u.name, status: 'invited' });
+        }
+      });
+      updateGroupParticipantsList();
+      toast('Mid-call invitations sent!', 'success');
+    } else {
+      // No call active: Start a new group call
+      await startGroupCall(invitedUsers);
+    }
   });
 
   el('book-session-form')?.addEventListener('submit', async e => {
@@ -1840,15 +1973,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Utility: Make Element Draggable
-function makeDraggable(el) {
-  if (!el) return;
+// Utility: Make Element Draggable (supports touch & mouse)
+function makeDraggable(element) {
+  if (!element) return;
   let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
   
-  el.onmousedown = dragMouseDown;
+  element.onmousedown = dragMouseDown;
+  element.addEventListener('touchstart', dragTouchStart, { passive: false });
 
   function dragMouseDown(e) {
-    const rect = el.getBoundingClientRect();
-    // Prevent drag if clicking the bottom right resize corner
+    const rect = element.getBoundingClientRect();
     if (e.clientX > rect.right - 20 && e.clientY > rect.bottom - 20) return;
     
     e = e || window.event;
@@ -1866,14 +2000,46 @@ function makeDraggable(el) {
     pos2 = pos4 - e.clientY;
     pos3 = e.clientX;
     pos4 = e.clientY;
-    el.style.top = (el.offsetTop - pos2) + "px";
-    el.style.left = (el.offsetLeft - pos1) + "px";
-    el.style.bottom = 'auto';
-    el.style.right = 'auto';
+    element.style.top = (element.offsetTop - pos2) + "px";
+    element.style.left = (element.offsetLeft - pos1) + "px";
+    element.style.bottom = 'auto';
+    element.style.right = 'auto';
   }
 
   function closeDragElement() {
     document.onmouseup = null;
     document.onmousemove = null;
+  }
+
+  function dragTouchStart(e) {
+    const rect = element.getBoundingClientRect();
+    const touch = e.touches[0];
+    // Don't drag if touching near the bottom right resize corner
+    if (touch.clientX > rect.right - 25 && touch.clientY > rect.bottom - 25) return;
+    
+    e.preventDefault(); // prevent scrolling
+    pos3 = touch.clientX;
+    pos4 = touch.clientY;
+    
+    document.addEventListener('touchmove', elementTouchDrag, { passive: false });
+    document.addEventListener('touchend', closeDragTouch);
+  }
+
+  function elementTouchDrag(e) {
+    e.preventDefault(); // prevent page bounce/scrolling while dragging
+    const touch = e.touches[0];
+    pos1 = pos3 - touch.clientX;
+    pos2 = pos4 - touch.clientY;
+    pos3 = touch.clientX;
+    pos4 = touch.clientY;
+    element.style.top = (element.offsetTop - pos2) + "px";
+    element.style.left = (element.offsetLeft - pos1) + "px";
+    element.style.bottom = 'auto';
+    element.style.right = 'auto';
+  }
+
+  function closeDragTouch() {
+    document.removeEventListener('touchmove', elementTouchDrag);
+    document.removeEventListener('touchend', closeDragTouch);
   }
 }
