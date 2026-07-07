@@ -234,6 +234,15 @@ async function initDatabase() {
       )
     `);
 
+    // ---- SKILL EMBEDDINGS CACHE TABLE ----
+    await run(`
+      CREATE TABLE IF NOT EXISTS skill_embeddings (
+        skill_name    TEXT PRIMARY KEY,
+        embedding     TEXT NOT NULL,
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
   console.log('✅ Database tables initialized successfully.');
 }
 

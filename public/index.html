@@ -280,8 +280,30 @@
             <div class="section-card glass-card" id="skills-card-anchor">
               <div class="section-card-header">
                 <h2><i class="fa-solid fa-graduation-cap"></i> My Skills Barter</h2>
-                <span class="section-badge" id="total-skills-badge">0 skills</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button type="button" id="ai-extract-skills-btn" class="btn btn-ghost btn-sm" style="font-size: 0.75rem; padding: 4px 8px; display: flex; align-items: center; gap: 4px; border: 1px dashed rgba(139,92,246,0.4);" title="Auto-extract skills from your bio using AI">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary-light);"></i> AI Suggest
+                  </button>
+                  <span class="section-badge" id="total-skills-badge">0 skills</span>
+                </div>
               </div>
+              
+              <!-- AI Suggested Skills Container -->
+              <div id="ai-suggestions-container" class="hidden" style="margin: 0 0 16px 0; padding: 12px; background: rgba(139,92,246,0.05); border: 1px dashed rgba(139,92,246,0.3); border-radius: 8px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-size: 0.8rem; color: var(--primary-light); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Suggested Skills from Bio
+                  </span>
+                  <button type="button" id="close-ai-suggestions-btn" class="icon-action-btn" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.75rem;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="ai-suggestions-list" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                  <!-- Clickable suggestion pills will be rendered here -->
+                </div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">
+                  Click a pill to quickly add it to your teaching or learning list!
+                </div>
+              </div>
+              
               <form id="add-skill-form" class="skill-add-form">
                 <select id="skill-name" required>
                   <option value="" disabled selected>Select a skill...</option>
@@ -486,7 +508,12 @@
                   <input type="text" id="profile-fullname" required>
                 </div>
                 <div class="form-group">
-                  <label>Bio</label>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label style="margin-bottom: 0;">Bio</label>
+                    <button type="button" id="profile-ai-extract-btn" class="btn btn-ghost btn-sm" style="font-size: 0.75rem; padding: 4px 8px; display: flex; align-items: center; gap: 4px; border: 1px dashed rgba(139,92,246,0.4);" title="Auto-extract skills from bio using AI">
+                      <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary-light);"></i> AI Suggest Skills
+                    </button>
+                  </div>
                   <textarea id="profile-bio" rows="4" placeholder="Tell your peers about your background, interests, and what you're excited to exchange..."></textarea>
                 </div>
                 <div class="form-group">
@@ -536,7 +563,10 @@
       <div class="ai-icon-badge"><i class="fa-solid fa-robot"></i></div>
       <div>
         <h3>AI Learning Assistant</h3>
-        <span style="font-size:0.75rem; color: var(--text-muted);">Powered by SkillXchange AI</span>
+        <span id="ai-status-label" style="font-size:0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
+          <span id="ai-status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
+          <span id="ai-status-text">AI Status: offline</span>
+        </span>
       </div>
     </div>
     <button class="icon-action-btn" id="close-ai-btn"><i class="fa-solid fa-xmark"></i></button>
