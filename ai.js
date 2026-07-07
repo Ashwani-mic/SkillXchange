@@ -1,8 +1,8 @@
 const { extractSkillsFromBio } = require('./embeddings');
 
-// Simple helper to call Gemini 1.5 Flash API
+// Simple helper to call Gemini 2.5 Flash API
 async function callGeminiAPI(prompt, apiKey) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   
   const response = await fetch(url, {
     method: 'POST',
