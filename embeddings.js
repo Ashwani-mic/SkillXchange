@@ -32,7 +32,7 @@ async function getEmbedding(text) {
   if (!cleanText) return null;
 
   try {
-    // 1. Check SQLite cache
+    // 1. Check PostgreSQL cache
     const cached = await db.get('SELECT embedding FROM skill_embeddings WHERE skill_name = ?', [cleanText]);
     if (cached && cached.embedding) {
       return JSON.parse(cached.embedding);
@@ -43,9 +43,8 @@ async function getEmbedding(text) {
     const output = await model(cleanText, { pooling: 'mean', normalize: true });
     const vector = Array.from(output.data);
 
-    // 3. Cache in database
     await db.run(
-      'INSERT OR REPLACE INTO skill_embeddings (skill_name, embedding) VALUES (?, ?)',
+      'INSERT INTO skill_embeddings (skill_name, embedding) VALUES (?, ?) ON CONFLICT (skill_name) DO UPDATE SET embedding = EXCLUDED.embedding',
       [cleanText, JSON.stringify(vector)]
     ).catch(err => console.warn('Cache write failed:', err.message));
 

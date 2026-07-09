@@ -1,95 +1,97 @@
-# SkillXchange — VS Code Setup Guide
+# SkillXchange — PostgreSQL Setup Guide
 
-## 🚀 Running in VS Code
-
-### Step 1: Open the Project
-1. Open **VS Code**
-2. Click **File → Open Folder**
-3. Navigate to `C:\Users\oops1\.gemini\antigravity\scratch\skillsharing`
-4. Click **Select Folder**
-
-### Step 2: Open Terminal
-- Press **Ctrl + `** (backtick) to open the built-in terminal
-
-### Step 3: Start the Server
-```bash
-npm start
-```
-
-### Step 4: Open in Browser
-- Visit **http://localhost:3000**
-- The app will load with the full landing page
+Welcome to the production-ready PostgreSQL branch of **SkillXchange**. The database has been migrated from SQLite to PostgreSQL for reliability, concurrency, and performance.
 
 ---
 
-## 🌐 Deploy Online (Free) — No More Sharing Links!
+## 🚀 Running the Project Locally
 
-### Method 1: Render.com (Recommended — Free)
+### Step 1: Install & Start PostgreSQL
 
-1. **Create a GitHub account** at github.com (if you don't have one)
-2. **Upload the project** to GitHub:
-   ```bash
-   git init
-   git add .
-   git commit -m "SkillXchange app"
-   git branch -M main
-   git remote add origin https://github.com/YOUR_USERNAME/skillxchange.git
-   git push -u origin main
+You have two options to run PostgreSQL locally:
+
+#### Option A: Docker Compose (Recommended)
+If you have Docker installed, simply run the following command in your project root to spin up a pre-configured PostgreSQL database:
+```bash
+docker compose up -d
+```
+
+#### Option B: Native Installation
+1. Download and install PostgreSQL from the [Official Downloads Page](https://www.postgresql.org/download/).
+2. Start the PostgreSQL service.
+3. Create a database named `skillxchange` (e.g. using `pgAdmin` or `psql` command line):
+   ```sql
+   CREATE DATABASE skillxchange;
    ```
-3. **Go to [render.com](https://render.com)** and sign up free
-4. Click **New → Web Service**
-5. Connect your GitHub repo
-6. Set:
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-7. Click **Deploy** — in 2-3 minutes you get a URL like `https://skillxchange.onrender.com`
-8. **Share ONLY this URL** — anyone worldwide can register and connect!
 
-### Method 2: Railway.app (Also Free)
-1. Go to [railway.app](https://railway.app)
-2. Sign up with GitHub
-3. Click **New Project → Deploy from GitHub Repo**
-4. Select your repo, it auto-detects Node.js
-5. Your app goes live in under 1 minute!
+---
+
+### Step 2: Configure Environment Variables
+
+1. Copy the `.env.example` file to create a `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` and set your `DATABASE_URL` connection string:
+   ```env
+   DATABASE_URL=postgresql://your_postgres_username:your_postgres_password@localhost:5432/skillxchange
+   ```
+   *If you are using the default Docker Compose configuration, the connection URL is:*
+   `postgresql://postgres:postgres@localhost:5432/skillxchange`
+
+---
+
+### Step 3: Run Database Seeding
+Initialize the database schemas and load rich demo users and matching data with the single seed command:
+```bash
+npm run seed
+```
+
+---
+
+### Step 4: Start the Application
+Run the start command:
+```bash
+npm start
+```
+Open **[http://localhost:3001](http://localhost:3001)** in your web browser.
+
+---
+
+## 📁 Updated Project Structure
+
+```text
+SkillXchange/
+├── server.js            ← Express server backend + Socket.IO handlers
+├── db.js                ← PostgreSQL database layer + compatibility wrappers
+├── seed.js              ← Database seeder script
+├── matching.js          ← Cosine similarity semantic matching engine
+├── ai.js                ← Gemini LLM API client wrapper
+├── embeddings.js        ← ONNX Feature Extraction embedding generator
+├── docker-compose.yml   ← Local PostgreSQL DB Docker recipe
+├── package.json         ← Project dependencies (pg driver integrated)
+└── public/              ← Client-side static assets (HTML, CSS, JS)
+```
 
 ---
 
 ## 🔧 Recommended VS Code Extensions
 
-Install these for the best experience:
+Install these for the best development experience:
 
 | Extension | What it does |
 |-----------|-------------|
-| **SQLite Viewer** | Visually browse your `db.sqlite` database |
-| **Thunder Client** | Test API endpoints without Postman |
-| **ESLint** | Code quality for JavaScript |
-| **Prettier** | Auto-format your code |
-| **GitLens** | Better Git history visualization |
+| **PostgreSQL Explorer** | Visually browse tables, indexes, and run queries |
+| **ESLint** | Code style and quality checker |
+| **Prettier** | Code formatter |
 
 ---
 
-## 📁 Project Structure
-
-```
-skillsharing/
-├── server.js          ← Express backend + Socket.IO
-├── db.js              ← SQLite database layer
-├── matching.js        ← Smart matching algorithm
-├── package.json       ← Dependencies
-├── db.sqlite          ← Your database (auto-created)
-└── public/
-    ├── index.html     ← Frontend HTML
-    ├── style.css      ← All styles
-    └── app.js         ← Frontend JavaScript
-```
-
----
-
-## ❓ Common Issues
+## ❓ Troubleshooting PostgreSQL Connection Issues
 
 | Problem | Solution |
 |---------|----------|
-| Port 3000 in use | Change `PORT=3001` in `.env` |
-| Camera not working | Use Chrome/Firefox (not Edge) |
-| Login fails | Check username/password exactly |
-| Matches not showing | Add at least one "teach" and one "learn" skill |
+| `Pool connection failed` | Verify your PostgreSQL service is running and ports are correct |
+| `database "skillxchange" does not exist` | Connect to your server with `psql` and run `CREATE DATABASE skillxchange;` |
+| `password authentication failed` | Check the credentials in your `.env` `DATABASE_URL` exactly |
+| `relation "X" already exists` | The database tables were created successfully. Running migrations will skip existing tables. |

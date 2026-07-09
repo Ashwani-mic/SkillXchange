@@ -34,12 +34,12 @@ async function getMatchesForUser(userId) {
     // 2. Get all other users with their skills list
     const otherUsers = await db.all(`
       SELECT u.id, u.username, u.full_name AS fullname, u.bio, u.avatar_url, u.average_rating,
-        GROUP_CONCAT(CASE WHEN us.skill_type = 'teach' THEN us.skill_name END, ',') AS teach_skills,
-        GROUP_CONCAT(CASE WHEN us.skill_type = 'learn' THEN us.skill_name END, ',') AS learn_skills
-      FROM users u
-      JOIN user_skills us ON us.user_id = u.id
-      WHERE u.id != ?
-      GROUP BY u.id
+      string_agg(CASE WHEN us.skill_type = 'teach' THEN us.skill_name END, ',') AS teach_skills,
+      string_agg(CASE WHEN us.skill_type = 'learn' THEN us.skill_name END, ',') AS learn_skills
+    FROM users u
+    JOIN user_skills us ON us.user_id = u.id
+    WHERE u.id != ?
+    GROUP BY u.id, u.username, u.full_name, u.bio, u.avatar_url, u.average_rating
     `, [userId]);
 
     const matches = [];

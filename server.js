@@ -173,8 +173,8 @@ app.get('/api/users/explore', requireAuth, async (req, res) => {
   try {
     let query = `
       SELECT u.id, u.username, u.full_name AS fullname, u.bio, u.avatar_url, u.average_rating,
-        (SELECT GROUP_CONCAT(us2.skill_name, ', ') FROM user_skills us2 WHERE us2.user_id = u.id AND us2.skill_type = 'teach') AS teach_skills,
-        (SELECT GROUP_CONCAT(us3.skill_name, ', ') FROM user_skills us3 WHERE us3.user_id = u.id AND us3.skill_type = 'learn') AS learn_skills
+        (SELECT string_agg(us2.skill_name, ', ') FROM user_skills us2 WHERE us2.user_id = u.id AND us2.skill_type = 'teach') AS teach_skills,
+        (SELECT string_agg(us3.skill_name, ', ') FROM user_skills us3 WHERE us3.user_id = u.id AND us3.skill_type = 'learn') AS learn_skills
       FROM users u
       WHERE u.id != ?
     `;
@@ -590,11 +590,11 @@ io.on('connection', socket => {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(receiver_id);
     
-    // Commit message to SQLite database immediately
+    // Commit message to PostgreSQL database immediately
     try {
       await db.saveDirectMessage(authenticatedUserId, targetUserId, message.trim());
     } catch (e) {
-      console.error('Failed to commit message to SQLite:', e.message);
+      console.error('Failed to commit message to PostgreSQL:', e.message);
     }
 
     const recipientSocketId = onlineUsers.get(targetUserId);
