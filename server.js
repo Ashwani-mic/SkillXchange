@@ -181,8 +181,8 @@ app.get('/api/users/explore', requireAuth, async (req, res) => {
     const params = [req.session.userId];
 
     if (search) {
-      query += ` AND (u.username LIKE ? OR u.full_name LIKE ? OR
-        u.id IN (SELECT user_id FROM user_skills WHERE skill_name LIKE ?))`;
+      query += ` AND (u.username ILIKE ? OR u.full_name ILIKE ? OR
+        u.id IN (SELECT user_id FROM user_skills WHERE skill_name ILIKE ?))`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
