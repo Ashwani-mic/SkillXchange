@@ -5,7 +5,8 @@ const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:post
 
 console.log('🔌 Connecting to PostgreSQL database...');
 const pool = new Pool({
-  connectionString
+  connectionString,
+  ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
 let hasContentColumn = false;
