@@ -3,6 +3,15 @@ const db = require('./db');
 let extractor = null;
 let modelLoading = null;
 
+const loggedErrors = new Set();
+
+function logCacheError(msg) {
+  if (!loggedErrors.has(msg)) {
+    loggedErrors.add(msg);
+    console.warn(`⚠️ Skill Embeddings Cache Warning: ${msg}`);
+  }
+}
+
 // Initialize the local ONNX feature-extractor pipeline
 async function initModel() {
   if (extractor) return extractor;
@@ -46,7 +55,7 @@ async function getEmbedding(text) {
     await db.run(
       'INSERT INTO skill_embeddings (skill_name, embedding) VALUES (?, ?) ON CONFLICT (skill_name) DO UPDATE SET embedding = EXCLUDED.embedding',
       [cleanText, JSON.stringify(vector)]
-    ).catch(err => console.warn('Cache write failed:', err.message));
+    ).catch(err => logCacheError(err.message));
 
     return vector;
   } catch (err) {

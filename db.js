@@ -67,13 +67,19 @@ async function run(sql, params = []) {
   let finalSql = translateQuery(sql);
   const isInsert = finalSql.trim().toUpperCase().startsWith('INSERT');
   
-  // Append RETURNING id to INSERT statements to mimic lastID
+  // Append RETURNING clause to INSERT statements to mimic lastID (skip id for skill_embeddings)
   if (isInsert && !finalSql.toUpperCase().includes('RETURNING')) {
-    finalSql += ' RETURNING id';
+    if (finalSql.toLowerCase().includes('skill_embeddings')) {
+      finalSql += ' RETURNING skill_name';
+    } else {
+      finalSql += ' RETURNING id';
+    }
   }
 
   const res = await pool.query(finalSql, params);
-  const lastID = (isInsert && res.rows && res.rows[0]) ? res.rows[0].id : null;
+  const lastID = (isInsert && res.rows && res.rows[0]) 
+    ? (res.rows[0].id || res.rows[0].skill_name) 
+    : null;
   return { id: lastID, changes: res.rowCount };
 }
 
