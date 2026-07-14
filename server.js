@@ -137,6 +137,12 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // =====================================================
+// GET /health - Lightweight endpoint to prevent cold starts
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// =====================================================
 //  USER ROUTES
 // =====================================================
 

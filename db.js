@@ -1,13 +1,45 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/skillxchange';
+let connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/skillxchange';
+
+// 1. Clean up DATABASE_URL if it has double assignment: DATABASE_URL=DATABASE_URL=...
+if (connectionString.startsWith('DATABASE_URL=')) {
+  connectionString = connectionString.substring('DATABASE_URL='.length);
+}
+
+// 2. Validate connection string and check for suspicious hostnames like "base"
+const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+const hasSuspiciousHost = connectionString.includes('@base') || connectionString.includes('//base') || connectionString.includes('host=base');
+
+if (!connectionString || hasSuspiciousHost) {
+  console.error('\n❌ DATABASE_URL Error: Invalid or missing connection configuration!');
+  if (hasSuspiciousHost) {
+    console.error('👉 The hostname is parsed as "base". This happens when a malformed connection string starting with "DATABASE_URL=" is parsed by pg-connection-string.');
+  }
+  console.error('👉 Please make sure your .env file contains: DATABASE_URL=postgresql://neondb_owner:npg_G2buthBkxF5n@ep-bitter-butterfly-atddgz4q-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=verify-full&channel_binding=require\n');
+  process.exit(1);
+}
+
+// 3. Resolve the pg SSL deprecation warning by replacing 'sslmode=require' with 'sslmode=verify-full'
+if (connectionString.includes('sslmode=require')) {
+  connectionString = connectionString.replace('sslmode=require', 'sslmode=verify-full');
+}
 
 console.log('🔌 Connecting to PostgreSQL database...');
-const pool = new Pool({
-  connectionString,
-  ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false }
-});
+
+const poolConfig = {
+  connectionString
+};
+
+// 4. Configure SSL for cloud databases (Neon, Render, etc.)
+if (!isLocalhost) {
+  poolConfig.ssl = {
+    rejectUnauthorized: false
+  };
+}
+
+const pool = new Pool(poolConfig);
 
 let hasContentColumn = false;
 
