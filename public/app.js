@@ -31,7 +31,24 @@ const ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.services.mozilla.com' }
+    { urls: 'stun:stun.services.mozilla.com' },
+    // Free public TURN servers from the Open Relay Project (Metered.ca) for dev/testing.
+    // NOTE: In production, you should generate/fetch dynamic custom TURN credentials (e.g. from Twilio or Xirsys) via secure backend APIs.
+    { 
+      urls: 'turn:openrelay.metered.ca:80', 
+      username: 'openrelayproject', 
+      credential: 'openrelayproject' 
+    },
+    { 
+      urls: 'turn:openrelay.metered.ca:443', 
+      username: 'openrelayproject', 
+      credential: 'openrelayproject' 
+    },
+    { 
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp', 
+      username: 'openrelayproject', 
+      credential: 'openrelayproject' 
+    }
   ]
 };
 
@@ -59,6 +76,94 @@ function toast(message, type = 'info', duration = 4000) {
     div.style.transition = 'all 0.3s ease';
     setTimeout(() => div.remove(), 300);
   }, duration);
+}
+
+// ==================================================
+//  NOTIFICATIONS & VIBRATIONS
+// ==================================================
+let notificationFlashInterval = null;
+const originalDocumentTitle = document.title;
+
+// Clear document title flashing when tab gets focus
+window.addEventListener('focus', () => {
+  if (notificationFlashInterval) {
+    clearInterval(notificationFlashInterval);
+    notificationFlashInterval = null;
+  }
+  document.title = originalDocumentTitle;
+});
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function triggerNewMessageNotification(senderName, messageText) {
+  // 1. Send browser Notification
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(`💬 Message from ${senderName}`, {
+        body: messageText,
+        icon: '/favicon.ico',
+        tag: 'message'
+      });
+    } catch (e) {
+      console.warn('Failed to send browser notification:', e);
+    }
+  }
+
+  // 2. Vibrate on mobile (short vibration for messages)
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate([100]);
+    } catch (e) {}
+  }
+
+  // 3. Flash document title if hidden
+  if (document.hidden) {
+    flashDocumentTitle(`(1) New Message — ${originalDocumentTitle}`);
+  }
+}
+
+function triggerIncomingCallNotification(callerName, isGroup = false) {
+  const title = isGroup ? `👥 Incoming Group Class` : `📞 Incoming Class Call`;
+  const body = `${callerName} is calling you...`;
+
+  // 1. Send browser Notification
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        tag: 'call',
+        requireInteraction: true // Keep active until action
+      });
+    } catch (e) {
+      console.warn('Failed to send call notification:', e);
+    }
+  }
+
+  // 2. Vibrate on mobile (repeating vibration pattern for calls)
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate([500, 250, 500, 250, 500]);
+    } catch (e) {}
+  }
+
+  // 3. Flash document title if hidden
+  if (document.hidden) {
+    flashDocumentTitle(`🚨 CALL FROM ${callerName.toUpperCase()} — ${originalDocumentTitle}`);
+  }
+}
+
+function flashDocumentTitle(newTitle) {
+  if (notificationFlashInterval) clearInterval(notificationFlashInterval);
+  let showNew = true;
+  notificationFlashInterval = setInterval(() => {
+    document.title = showNew ? newTitle : originalDocumentTitle;
+    showNew = !showNew;
+  }, 1000);
 }
 
 // ==================================================
@@ -185,6 +290,7 @@ function launchApp() {
   hide('landing-view');
   show('app-view');
   el('app-view').classList.remove('hidden');
+  requestNotificationPermission();
   updateHeaderUser();
   initSocketIO();
   initNavTabs();
@@ -194,6 +300,7 @@ function launchApp() {
   initSessionsPage();
   initProfilePage();
   initChatPanel();
+  initChatsPage();
   initAIPanel();
   initCallUI();
   initModals();
@@ -208,9 +315,35 @@ function launchApp() {
 // ==================================================
 function initSocketIO() {
   socket = io();
-  socket.emit('authenticate', currentUser.id);
+  let heartbeatInterval = null;
+
+  socket.on('connect', () => {
+    // 1. Re-authenticate upon connection/reconnection to sync server state
+    socket.emit('authenticate', currentUser.id);
+    
+    // 2. Start heartbeat pinging every 25 seconds
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(() => {
+      if (socket && socket.connected) {
+        socket.emit('heartbeat');
+      }
+    }, 25000);
+  });
+
+  socket.on('disconnect', () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  });
 
   socket.on('online_users_list', userIds => {
+    // Reset and reconcile presence state upon reconnection to prevent desync
+    onlineUserIdsSet.forEach(userId => {
+      updateUserPresenceUI(userId, false);
+    });
+    onlineUserIdsSet.clear();
+
     userIds.forEach(id => {
       const userId = parseInt(id);
       onlineUserIdsSet.add(userId);
@@ -219,7 +352,8 @@ function initSocketIO() {
   });
 
   socket.on('receive_message', msg => {
-    if (activeChat.partnerId === msg.sender_id) {
+    const isActiveTab = (activeChat.partnerId === msg.sender_id);
+    if (isActiveTab) {
       if (msg.is_call_log) {
         appendChatMessage(msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
       } else {
@@ -229,6 +363,22 @@ function initSocketIO() {
       if (!msg.is_call_log) {
         toast(`💬 ${msg.sender_name}: ${msg.message.slice(0, 60)}...`, 'info');
       }
+    }
+
+    // Also update full Chats tab log if active
+    const logEl = el('chats-messages-log');
+    const isChatsTabActive = (currentActiveChatId === msg.sender_id);
+    if (logEl && isChatsTabActive) {
+      if (msg.is_call_log) {
+        appendChatMessageToElement(logEl, msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
+      } else {
+        appendChatMessageToElement(logEl, msg.message, 'incoming');
+      }
+    }
+
+    // Trigger notification if message is new and window/tab is inactive
+    if (!msg.is_call_log && (document.hidden || !isActiveTab)) {
+      triggerNewMessageNotification(msg.sender_name, msg.message);
     }
   });
 
@@ -289,16 +439,19 @@ function initSocketIO() {
 
   // WebRTC 1-on-1 Signaling Enhanced Flow
   socket.on('incoming_call', ({ callerId, callerName, offer }) => {
+    triggerIncomingCallNotification(callerName, false);
     show('incoming-call-modal');
     el('incoming-call-title').textContent = 'Incoming Class Call';
     el('incoming-call-msg').textContent = `${callerName} is inviting you to a live 1-on-1 session.`;
     
     el('accept-call-btn').onclick = async () => {
+      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       await acceptDirectCall(callerId, callerName, offer);
     };
     
     el('decline-call-btn').onclick = () => {
+      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       socket.emit('decline_call', { to: callerId });
     };
@@ -327,6 +480,7 @@ function initSocketIO() {
   });
 
   socket.on('call_cancelled', () => {
+    if ('vibrate' in navigator) navigator.vibrate(0);
     hide('incoming-call-modal');
     toast('Call cancelled by caller.', 'info');
     endCallLocal();
@@ -334,16 +488,19 @@ function initSocketIO() {
 
   // WebRTC Group Calling Signaling (Mesh Network)
   socket.on('incoming_group_call', ({ roomId, callerId, callerName, invitedUserIds }) => {
+    triggerIncomingCallNotification(callerName, true);
     show('incoming-call-modal');
     el('incoming-call-title').textContent = 'Incoming Group Call';
     el('incoming-call-msg').textContent = `${callerName} is inviting you to a Group Classroom.`;
     
     el('accept-call-btn').onclick = async () => {
+      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       await joinGroupCall(roomId, callerName);
     };
     
     el('decline-call-btn').onclick = () => {
+      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       socket.emit('decline_group_call', { initiatorId: callerId });
     };
@@ -423,6 +580,21 @@ function initSocketIO() {
   socket.on('group_participants_update', (participants) => {
     groupParticipants = participants;
     updateGroupParticipantsList();
+  });
+
+  socket.on('receive_group_message', msg => {
+    // If the active chat in the Chats tab matches this group
+    const logEl = el('chats-messages-log');
+    const isGroupTabActive = (currentActiveChatId === `group_${msg.group_id}`);
+    
+    if (logEl && isGroupTabActive) {
+      appendChatMessageToElement(logEl, msg.message, msg.sender_id === currentUser.id ? 'outgoing' : 'incoming', msg.sender_name);
+    } else {
+      toast(`👥 [${msg.sender_name} in Group]: ${msg.message.slice(0, 50)}...`, 'info');
+      if (document.hidden) {
+        triggerNewMessageNotification(`Group message from ${msg.sender_name}`, msg.message);
+      }
+    }
   });
 }
 
@@ -511,6 +683,7 @@ function initNavTabs() {
 function switchTab(tabName) {
   qsa('.tab-section').forEach(s => s.classList.remove('active'));
   el(`tab-${tabName}`)?.classList.add('active');
+  if (tabName === 'chats') loadChatsPage();
   if (tabName === 'explore') loadExplorePeers();
   if (tabName === 'sessions') loadSessions();
   if (tabName === 'profile') loadProfile();
@@ -1058,16 +1231,10 @@ function initChatPanel() {
 }
 
 function openChat(peerId, peerName, avatarUrl) {
-  activeChat = { partnerId: peerId, partnerName: peerName };
-  el('chat-partner-name').textContent = peerName;
-  el('chat-partner-status').className = 'online-dot offline';
-
-  const avatarEl = el('chat-peer-avatar');
-  avatarEl.innerHTML = avatarUrl ? `<img src="${avatarUrl}" alt="avatar">` : `<i class="fa-solid fa-user"></i>`;
-
-  el('chat-messages-log').innerHTML = '';
-  el('chat-sidebar').classList.remove('closed');
-  loadChatHistory(peerId);
+  // Redirect to full Chats Tab for a unified premium messaging experience
+  switchTab('chats');
+  qsa('.header-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'chats'));
+  selectChat(peerId, peerName, avatarUrl);
 }
 
 function closeChat() {
@@ -1456,12 +1623,25 @@ function initPeerConnection(peerId) {
     console.log("ICE Connection State:", peerConnection.iceConnectionState);
   };
 
-  peerConnection.onconnectionstatechange = () => {
+  peerConnection.onconnectionstatechange = async () => {
     console.log("Connection State Changed:", peerConnection.connectionState);
     if (peerConnection.connectionState === 'connected') {
       toast('🔗 Peer connected!', 'success');
     } else if (peerConnection.connectionState === 'failed') {
-      toast('❌ Connection failed. Retrying...', 'error');
+      toast('❌ Connection failed. Attempting ICE recovery...', 'warning');
+      if (!peerConnection.hasRestartedIce) {
+        peerConnection.hasRestartedIce = true;
+        console.log("Attempting 1:1 ICE restart via silent renegotiation...");
+        try {
+          const offer = await peerConnection.createOffer({ iceRestart: true });
+          await peerConnection.setLocalDescription(offer);
+          socket.emit('webrtc_offer', { offer, to: peerId });
+        } catch (err) {
+          console.error("1:1 ICE Restart offer creation failed:", err);
+        }
+      } else {
+        toast('❌ Connection recovery failed. Please check network settings.', 'error');
+      }
     }
   };
 }
@@ -1749,13 +1929,28 @@ function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName, isIni
     console.log(`Group ICE State for ${peerUserName}:`, pc.iceConnectionState);
   };
 
-  pc.onconnectionstatechange = () => {
+  pc.onconnectionstatechange = async () => {
     console.log(`Group Connection State for ${peerUserName}:`, pc.connectionState);
     if (pc.connectionState === 'connected') {
       const idx = groupParticipants.findIndex(p => p.userId === peerUserId);
       if (idx !== -1) {
         groupParticipants[idx].status = 'connected';
         updateGroupParticipantsList();
+      }
+    } else if (pc.connectionState === 'failed') {
+      console.log(`Group call connection failed for ${peerUserName}. Attempting ICE restart...`);
+      if (!pc.hasRestartedIce) {
+        pc.hasRestartedIce = true;
+        try {
+          const offer = await pc.createOffer({ iceRestart: true });
+          await pc.setLocalDescription(offer);
+          socket.emit('group_signal', {
+            toSocketId: peerSocketId,
+            signalData: offer
+          });
+        } catch (err) {
+          console.error(`Group ICE Restart failed for ${peerUserName}:`, err);
+        }
       }
     }
   };
@@ -2125,6 +2320,337 @@ function openReviewModal(sessionId, peerName) {
   hide('review-error');
 }
 
+}
+
+// ==================================================
+//  CHATS & PERSISTENT STUDY GROUPS
+// ==================================================
+let currentActiveChatId = null; // number (userId) or string (e.g. 'group_5')
+let activeGroupsList = [];
+
+function initChatsPage() {
+  el('create-group-btn')?.addEventListener('click', () => {
+    openCreateGroupModal();
+  });
+  
+  el('close-create-group-btn')?.addEventListener('click', () => hide('create-group-modal'));
+  el('cancel-create-group-btn')?.addEventListener('click', () => hide('create-group-modal'));
+  el('create-group-modal')?.addEventListener('click', e => {
+    if (e.target === el('create-group-modal')) hide('create-group-modal');
+  });
+
+  el('create-group-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    hide('create-group-error');
+    const name = el('group-name-input').value.trim();
+    if (!name) return;
+
+    const checkedBoxes = document.querySelectorAll('input[name="group-member-invite"]:checked');
+    const memberIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+
+    try {
+      const res = await api('POST', '/api/groups', { name, memberIds });
+      hide('create-group-modal');
+      toast(`👥 Group "${name}" created!`, 'success');
+      loadChatsPage();
+      // Auto-select the newly created group
+      selectChat(`group_${res.groupId}`, name, null);
+    } catch (err) {
+      el('create-group-error').textContent = err.message;
+      show('create-group-error');
+    }
+  });
+
+  el('chats-search-input')?.addEventListener('input', e => {
+    const query = e.target.value.toLowerCase().trim();
+    qsa('.chat-item').forEach(item => {
+      const name = item.querySelector('.chat-item-name').textContent.toLowerCase();
+      item.style.display = name.includes(query) ? 'flex' : 'none';
+    });
+  });
+
+  el('chats-input-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const input = el('chats-message-input');
+    const message = input.value.trim();
+    if (!message || !currentActiveChatId) return;
+
+    const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
+    const logEl = el('chats-messages-log');
+
+    try {
+      if (isGroup) {
+        const groupId = currentActiveChatId.replace('group_', '');
+        if (socket && socket.connected) {
+          socket.emit('send_group_message', { group_id: groupId, message });
+          appendChatMessageToElement(logEl, message, 'outgoing');
+        } else {
+          await api('POST', `/api/groups/${groupId}/messages`, { message });
+          appendChatMessageToElement(logEl, message, 'outgoing');
+        }
+      } else {
+        if (socket && socket.connected) {
+          socket.emit('send_message', { receiver_id: currentActiveChatId, message, sender_name: currentUser.username });
+          appendChatMessageToElement(logEl, message, 'outgoing');
+        } else {
+          await api('POST', '/api/messages', { receiver_id: currentActiveChatId, message });
+          appendChatMessageToElement(logEl, message, 'outgoing');
+        }
+      }
+      input.value = '';
+    } catch (err) {
+      toast('Failed to send message: ' + err.message, 'error');
+    }
+  });
+}
+
+async function loadChatsPage() {
+  const listContainer = el('chats-list-container');
+  if (!listContainer) return;
+
+  listContainer.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading chats...</div>';
+
+  try {
+    const [groupsData, matchesData] = await Promise.all([
+      api('GET', '/api/groups'),
+      api('GET', '/api/matches')
+    ]);
+
+    activeGroupsList = groupsData.groups || [];
+    const matches = matchesData.matches || [];
+
+    listContainer.innerHTML = '';
+
+    // Render groups section
+    if (activeGroupsList.length > 0) {
+      const groupHeader = document.createElement('div');
+      groupHeader.className = 'col-header teach-header';
+      groupHeader.style.margin = '8px 0 4px 0';
+      groupHeader.innerHTML = '<i class="fa-solid fa-users"></i> Study Groups';
+      listContainer.appendChild(groupHeader);
+
+      activeGroupsList.forEach(g => {
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        item.dataset.groupId = g.id;
+        if (currentActiveChatId === `group_${g.id}`) item.classList.add('active');
+
+        item.innerHTML = `
+          <div class="chat-item-avatar" style="background: rgba(139, 92, 246, 0.15); color: #8b5cf6;">
+            <i class="fa-solid fa-people-group"></i>
+          </div>
+          <div class="chat-item-info">
+            <div class="chat-item-name-row">
+              <span class="chat-item-name">${g.name}</span>
+              <span class="chat-item-badge">${g.member_count}</span>
+            </div>
+            <span class="chat-item-preview">Group Classroom</span>
+          </div>
+        `;
+        item.addEventListener('click', () => selectChat(`group_${g.id}`, g.name, null));
+        listContainer.appendChild(item);
+      });
+    }
+
+    // Render direct matched peers section
+    const peerHeader = document.createElement('div');
+    peerHeader.className = 'col-header learn-header';
+    peerHeader.style.margin = '16px 0 4px 0';
+    peerHeader.innerHTML = '<i class="fa-solid fa-user-friends"></i> Matched Peers';
+    listContainer.appendChild(peerHeader);
+
+    if (matches.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'skills-empty-hint';
+      hint.textContent = 'No matches found yet. Add skills to match!';
+      listContainer.appendChild(hint);
+    } else {
+      matches.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        item.dataset.userId = m.id;
+        if (currentActiveChatId === m.id) item.classList.add('active');
+
+        const isOnline = onlineUserIdsSet.has(m.id);
+        const avatarHtml = m.avatar_url 
+          ? `<img src="${m.avatar_url}" alt="avatar">` 
+          : `<i class="fa-solid fa-user"></i>`;
+
+        item.innerHTML = `
+          <div class="chat-item-avatar">
+            ${avatarHtml}
+          </div>
+          <div class="chat-item-info">
+            <div class="chat-item-name-row">
+              <span class="chat-item-name">${m.fullname || m.username}</span>
+              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="font-size: 0.75rem;">${isOnline ? 'online' : 'offline'}</span>
+            </div>
+            <span class="chat-item-preview">${m.bio ? m.bio.slice(0, 40) + '...' : 'No bio provided'}</span>
+          </div>
+        `;
+        item.addEventListener('click', () => selectChat(m.id, m.fullname || m.username, m.avatar_url));
+        listContainer.appendChild(item);
+      });
+    }
+  } catch (err) {
+    listContainer.innerHTML = `<div class="error-msg">Failed to load: ${err.message}</div>`;
+  }
+}
+
+async function selectChat(id, name, avatarUrl) {
+  currentActiveChatId = id;
+  
+  // Highlight active chat item
+  qsa('.chat-item').forEach(item => {
+    const isGroup = typeof id === 'string' && id.startsWith('group_');
+    if (isGroup) {
+      item.classList.toggle('active', item.dataset.groupId == id.replace('group_', ''));
+    } else {
+      item.classList.toggle('active', item.dataset.userId == id);
+    }
+  });
+
+  hide('chats-window-empty');
+  show('chats-window-active');
+
+  const nameEl = el('chats-header-name');
+  nameEl.textContent = name;
+
+  const avatarEl = el('chats-header-avatar');
+  const isGroup = typeof id === 'string' && id.startsWith('group_');
+  if (avatarUrl) {
+    avatarEl.innerHTML = `<img src="${avatarUrl}" alt="avatar">`;
+  } else {
+    avatarEl.innerHTML = isGroup ? `<i class="fa-solid fa-people-group"></i>` : `<i class="fa-solid fa-user"></i>`;
+  }
+
+  const statusEl = el('chats-header-status');
+  const callBtn = el('chats-start-call-btn');
+
+  if (isGroup) {
+    statusEl.textContent = 'Group Chat';
+    statusEl.className = 'online-dot online';
+    callBtn.innerHTML = '<i class="fa-solid fa-users"></i> Start Class';
+    callBtn.onclick = async () => {
+      const groupId = id.replace('group_', '');
+      try {
+        const membersData = await api('GET', `/api/groups/${groupId}/members`);
+        const invitedUsers = membersData.members
+          .filter(m => m.id !== currentUser.id)
+          .map(m => ({ id: m.id, name: m.name }));
+        
+        if (invitedUsers.length === 0) {
+          toast('No other members in this group to invite.', 'warning');
+          return;
+        }
+        await startGroupCall(invitedUsers);
+      } catch (err) {
+        toast('Failed to start group call: ' + err.message, 'error');
+      }
+    };
+  } else {
+    const isOnline = onlineUserIdsSet.has(id);
+    statusEl.textContent = isOnline ? 'online' : 'offline';
+    statusEl.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
+    callBtn.innerHTML = '<i class="fa-solid fa-video"></i> Start Class';
+    callBtn.onclick = () => {
+      openVideoCall(id, name);
+    };
+  }
+
+  const logEl = el('chats-messages-log');
+  logEl.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading messages...</div>';
+
+  try {
+    if (isGroup) {
+      const groupId = id.replace('group_', '');
+      const data = await api('GET', `/api/groups/${groupId}/messages`);
+      logEl.innerHTML = '';
+      data.messages.forEach(m => {
+        appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', m.sender_name);
+      });
+    } else {
+      const data = await api('GET', `/api/messages/${id}`);
+      logEl.innerHTML = '';
+      data.messages.forEach(m => {
+        if (m.is_call_log) {
+          appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
+        } else {
+          appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming');
+        }
+      });
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  } catch (err) {
+    logEl.innerHTML = `<div class="error-msg">Failed to load: ${err.message}</div>`;
+  }
+}
+
+function appendChatMessageToElement(logEl, text, direction, senderName = null) {
+  const div = document.createElement('div');
+  div.className = `msg-bubble ${direction}`;
+  
+  if (direction.includes('call-log')) {
+    div.innerHTML = text;
+  } else {
+    if (senderName && direction === 'incoming') {
+      const nameSpan = document.createElement('span');
+      nameSpan.style.display = 'block';
+      nameSpan.style.fontSize = '0.75rem';
+      nameSpan.style.color = '#8b5cf6';
+      nameSpan.style.fontWeight = '700';
+      nameSpan.style.marginBottom = '4px';
+      nameSpan.textContent = senderName;
+      div.appendChild(nameSpan);
+      div.appendChild(document.createTextNode(text));
+    } else {
+      div.textContent = text;
+    }
+  }
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function openCreateGroupModal() {
+  show('create-group-modal');
+  el('group-name-input').value = '';
+  hide('create-group-error');
+
+  const listContainer = el('create-group-peers-list');
+  if (!listContainer) return;
+
+  listContainer.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading peers...</div>';
+
+  try {
+    const data = await api('GET', '/api/matches');
+    const matches = data.matches || [];
+    
+    listContainer.innerHTML = '';
+    if (matches.length === 0) {
+      listContainer.innerHTML = '<div class="skills-empty-hint">No matched peers available to invite.</div>';
+      return;
+    }
+
+    matches.forEach(m => {
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.gap = '10px';
+      div.style.padding = '4px 0';
+      
+      div.innerHTML = `
+        <input type="checkbox" id="group-invite-${m.id}" name="group-member-invite" value="${m.id}">
+        <label for="group-invite-${m.id}" style="font-size: 0.9rem; cursor: pointer; color: var(--text-light);">
+          ${m.fullname || m.username}
+        </label>
+      `;
+      listContainer.appendChild(div);
+    });
+  } catch (err) {
+    listContainer.innerHTML = `<div class="error-msg">Failed to load peers: ${err.message}</div>`;
+  }
+}
+
 // ==================================================
 //  AUTO LOGIN (session persistence)
 // ==================================================
@@ -2151,6 +2677,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!autoLoggedIn) {
     show('landing-view');
     hide('app-view');
+  }
+
+  // Fade out and remove the app loading screen (mitigates Render free tier cold starts)
+  const loadingScreen = el('app-loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => loadingScreen.remove(), 500);
   }
 });
 

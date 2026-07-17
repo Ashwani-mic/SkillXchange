@@ -137,9 +137,11 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // =====================================================
-// GET /health - Lightweight endpoint to prevent cold starts
+// GET /health - Lightweight endpoint to prevent cold starts.
+// NOTE: Pinging this endpoint every 10-14 minutes only mitigates cold starts on Render's free tier.
+// The permanent fix is upgrading to a paid instance type that does not spin down.
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.status(200).send('200 ok');
 });
 
 // =====================================================
@@ -537,6 +539,185 @@ app.post('/api/ai/extract-tags', requireAuth, async (req, res) => {
 });
 
 // =====================================================
+//  GROUP ROUTES
+// =====================================================
+
+// POST /api/groups — Create a new group
+app.post('/api/groups', requireAuth, async (req, res) => {
+  const { name, memberIds = [] } = req.body;
+  if (!name) return res.status(400).json({ error: 'Group name is required.' });
+
+  try {
+    // 1. Insert group
+    const groupRes = await db.run(
+      'INSERT INTO groups (name, created_by) VALUES (?, ?)',
+      [name, req.session.userId]
+    );
+    const groupId = groupRes.id;
+
+    // 2. Add creator as admin
+    await db.run(
+      'INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)',
+      [groupId, req.session.userId, 'admin']
+    );
+
+    // 3. Add other members
+    for (const mId of memberIds) {
+      const parsedId = parseInt(mId);
+      if (parsedId && parsedId !== req.session.userId) {
+        await db.run(
+          'INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+          [groupId, parsedId, 'member']
+        );
+      }
+    }
+
+    res.status(201).json({ success: true, groupId, name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/groups/:id/members — Add new members
+app.post('/api/groups/:id/members', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  const { memberIds = [] } = req.body;
+
+  try {
+    const isMember = await db.get(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.session.userId]
+    );
+    if (!isMember) return res.status(403).json({ error: 'Not authorized to add members.' });
+
+    for (const mId of memberIds) {
+      const parsedId = parseInt(mId);
+      if (parsedId) {
+        await db.run(
+          'INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+          [groupId, parsedId, 'member']
+        );
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/groups — List current user's groups
+app.get('/api/groups', requireAuth, async (req, res) => {
+  try {
+    const groups = await db.all(`
+      SELECT g.id, g.name, g.created_by, g.created_at,
+        (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count
+      FROM groups g
+      JOIN group_members gm ON gm.group_id = g.id
+      WHERE gm.user_id = ?
+      ORDER BY g.created_at DESC
+    `, [req.session.userId]);
+    res.json({ groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/groups/:id/messages — Get message history
+app.get('/api/groups/:id/messages', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  try {
+    const isMember = await db.get(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.session.userId]
+    );
+    if (!isMember) return res.status(403).json({ error: 'Access denied.' });
+
+    const messages = await db.all(`
+      SELECT gm.id, gm.group_id, gm.sender_id, u.username AS sender_name, u.avatar_url AS sender_avatar, gm.message, gm.created_at AS timestamp
+      FROM group_messages gm
+      JOIN users u ON u.id = gm.sender_id
+      WHERE gm.group_id = ?
+      ORDER BY gm.created_at ASC
+    `, [groupId]);
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/groups/:id/messages — Post a group message
+app.post('/api/groups/:id/messages', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message is required.' });
+
+  try {
+    const isMember = await db.get(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.session.userId]
+    );
+    if (!isMember) return res.status(403).json({ error: 'Access denied.' });
+
+    const msgRes = await db.run(
+      'INSERT INTO group_messages (group_id, sender_id, message) VALUES (?, ?, ?)',
+      [groupId, req.session.userId, message.trim()]
+    );
+
+    const sender = await db.get('SELECT username, avatar_url FROM users WHERE id = ?', [req.session.userId]);
+
+    // Realtime broadcast to group members
+    const members = await db.all('SELECT user_id FROM group_members WHERE group_id = ?', [groupId]);
+    members.forEach(member => {
+      if (member.user_id !== req.session.userId) {
+        const socketId = onlineUsers.get(member.user_id);
+        if (socketId) {
+          io.to(socketId).emit('receive_group_message', {
+            id: msgRes.id,
+            group_id: groupId,
+            sender_id: req.session.userId,
+            sender_name: sender.username,
+            sender_avatar: sender.avatar_url,
+            message: message.trim(),
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      messageId: msgRes.id,
+      senderName: sender.username,
+      senderAvatar: sender.avatar_url
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/groups/:id/members — Get members roster
+app.get('/api/groups/:id/members', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  try {
+    const isMember = await db.get(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.session.userId]
+    );
+    if (!isMember) return res.status(403).json({ error: 'Access denied.' });
+
+    const members = await db.all(`
+      SELECT u.id, u.username AS name, u.full_name AS fullname, u.avatar_url
+      FROM group_members gm
+      JOIN users u ON u.id = gm.user_id
+      WHERE gm.group_id = ?
+    `, [groupId]);
+    res.json({ members });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================================================
 //  SOCKET.IO — REAL-TIME EVENTS
 // =====================================================
 const groupRooms = new Map(); // roomId -> { hostId, hostName, invitedUsers: Array<{id, name}>, connectedUsers: Map(socketId -> {userId, userName}) }
@@ -575,11 +756,39 @@ function rebuildParticipantsList(room) {
   return participantsList;
 }
 
+// Proactive Heartbeat Scan: disconnect sockets inactive for >60s to prevent stale entries (especially on mobile)
+setInterval(() => {
+  const now = Date.now();
+  io.sockets.sockets.forEach(socket => {
+    if (socket.authenticatedUserId) {
+      const lastSeen = socket.lastSeen || now;
+      if (now - lastSeen > 60000) {
+        console.log(`Proactively disconnecting inactive socket ${socket.id} for user ${socket.authenticatedUserId} (missed heartbeat)`);
+        socket.disconnect(true);
+      }
+    }
+  });
+}, 10000);
+
 io.on('connection', socket => {
   let authenticatedUserId = null;
 
   socket.on('authenticate', userId => {
     authenticatedUserId = parseInt(userId);
+    
+    // Clean up any stale sockets previously mapped to this user to avoid presence desync
+    const oldSocketId = onlineUsers.get(authenticatedUserId);
+    if (oldSocketId && oldSocketId !== socket.id) {
+      const oldSocket = io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.log(`Forcefully disconnecting stale socket ${oldSocketId} for user ${authenticatedUserId}`);
+        oldSocket.disconnect(true);
+      }
+    }
+
+    socket.authenticatedUserId = authenticatedUserId;
+    socket.lastSeen = Date.now();
+
     onlineUsers.set(authenticatedUserId, socket.id);
     socket.join(`user_${authenticatedUserId}`);
     
@@ -589,6 +798,10 @@ io.on('connection', socket => {
     // Broadcast presence change to other users
     socket.broadcast.emit('user_online', authenticatedUserId);
     console.log(`User ${authenticatedUserId} connected (socket: ${socket.id})`);
+  });
+
+  socket.on('heartbeat', () => {
+    socket.lastSeen = Date.now();
   });
 
   // Chat message
@@ -613,6 +826,42 @@ io.on('connection', socket => {
     
     if (recipientSocketId) {
       io.to(recipientSocketId).emit('receive_message', payload);
+    }
+  });
+
+  // Group Chat message
+  socket.on('send_group_message', async ({ group_id, message }) => {
+    if (!authenticatedUserId) return;
+    const gId = parseInt(group_id);
+
+    try {
+      // 1. Commit message to database
+      const msgRes = await db.run(
+        'INSERT INTO group_messages (group_id, sender_id, message) VALUES (?, ?, ?)',
+        [gId, authenticatedUserId, message.trim()]
+      );
+
+      const sender = await db.get('SELECT username, avatar_url FROM users WHERE id = ?', [authenticatedUserId]);
+
+      // 2. Broadcast to all members of the group
+      const members = await db.all('SELECT user_id FROM group_members WHERE group_id = ?', [gId]);
+      members.forEach(m => {
+        const memberId = m.user_id;
+        const socketId = onlineUsers.get(memberId);
+        if (socketId) {
+          io.to(socketId).emit('receive_group_message', {
+            id: msgRes.id,
+            group_id: gId,
+            sender_id: authenticatedUserId,
+            sender_name: sender.username,
+            sender_avatar: sender.avatar_url,
+            message: message.trim(),
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+    } catch (e) {
+      console.error('Failed to process group socket message:', e.message);
     }
   });
 

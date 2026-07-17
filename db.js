@@ -297,10 +297,47 @@ async function initDatabase() {
     )
   `);
 
+  // ---- GROUPS TABLES (PERSISTENT CHAT & CLASSROOM GROUPS) ----
+  await run(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id               SERIAL PRIMARY KEY,
+      name             VARCHAR(255) NOT NULL,
+      created_by       INTEGER NOT NULL,
+      created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS group_members (
+      group_id         INTEGER NOT NULL,
+      user_id          INTEGER NOT NULL,
+      joined_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      role             VARCHAR(50) DEFAULT 'member' CHECK(role IN ('admin', 'member')),
+      PRIMARY KEY(group_id, user_id),
+      FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS group_messages (
+      id               SERIAL PRIMARY KEY,
+      group_id         INTEGER NOT NULL,
+      sender_id        INTEGER NOT NULL,
+      message          TEXT NOT NULL,
+      created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
+      FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // ---- INDEXES FOR OPTIMIZED QUERY PERFORMANCE ----
   await run(`CREATE INDEX IF NOT EXISTS idx_user_skills_user_id ON user_skills(user_id)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_reviews_reviewed_user ON reviews(reviewed_user_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages(group_id)`);
 
   console.log('✅ Database tables initialized successfully.');
 }

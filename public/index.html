@@ -10,8 +10,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="style.css">
+  <style>
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.08); opacity: 1; filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.6)); }
+      100% { transform: scale(1); opacity: 0.8; }
+    }
+  </style>
 </head>
 <body>
+
+<!-- =================== INITIAL COLD START LOADING SCREEN =================== -->
+<!-- Note: Pinging /health mitigates Render's free tier cold starts. Upgrading is the permanent fix. -->
+<div id="app-loading-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0b0f19; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.5s ease;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+    <div class="nav-logo-icon" style="font-size: 3.5rem; animation: pulse 2s infinite ease-in-out; color: #8b5cf6; display: flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: rgba(139, 92, 246, 0.1); border-radius: 50%;"><i class="fa-solid fa-arrows-rotate"></i></div>
+    <h2 style="font-family: 'Outfit', sans-serif; font-size: 2.2rem; color: #f3f4f6; font-weight: 700; margin: 0; letter-spacing: -0.5px;">SkillXchange</h2>
+    <p style="font-family: 'Inter', sans-serif; color: #9ca3af; font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 8px;">
+      <i class="fa-solid fa-spinner fa-spin" style="color: #8b5cf6;"></i> Preparing secure classroom session...
+    </p>
+  </div>
+</div>
 
 <!-- =================== LANDING PAGE =================== -->
 <div id="landing-view" class="view-container">
@@ -200,6 +219,7 @@
     </div>
     <nav class="app-header-nav">
       <button class="header-nav-btn active" data-tab="dashboard"><i class="fa-solid fa-chart-simple"></i> Dashboard</button>
+      <button class="header-nav-btn" data-tab="chats"><i class="fa-solid fa-message"></i> Chats</button>
       <button class="header-nav-btn" data-tab="explore"><i class="fa-solid fa-compass"></i> Explore</button>
       <button class="header-nav-btn" data-tab="sessions"><i class="fa-solid fa-calendar-alt"></i> My Classes</button>
       <button class="header-nav-btn" data-tab="profile"><i class="fa-solid fa-user-gear"></i> Profile</button>
@@ -408,6 +428,64 @@
                   <div class="empty-state-card"><i class="fa-solid fa-handshake"></i><p>No partial matches found.</p></div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== CHATS TAB ====== -->
+      <section id="tab-chats" class="tab-section">
+        <div class="tab-header-row">
+          <div>
+            <h1>Messages & Groups</h1>
+            <p>Chat with your matches and collaborate in group study rooms.</p>
+          </div>
+          <button class="btn btn-primary btn-sm" id="create-group-btn">
+            <i class="fa-solid fa-users-medical"></i> New Group
+          </button>
+        </div>
+
+        <div class="chats-layout">
+          <!-- Left sidebar: Chats List -->
+          <div class="chats-sidebar glass-card">
+            <div class="chats-search-bar">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="chats-search-input" placeholder="Search chats...">
+            </div>
+            <div class="chats-list" id="chats-list-container">
+              <!-- Chat list items will be rendered dynamically here -->
+            </div>
+          </div>
+
+          <!-- Right main area: Chat Messages Area -->
+          <div class="chats-chat-window glass-card" id="chats-window">
+            <div class="chats-window-empty" id="chats-window-empty">
+              <i class="fa-solid fa-comments" style="font-size: 3rem; color: var(--primary-light); opacity: 0.6;"></i>
+              <h3>Your Conversations</h3>
+              <p>Select a peer or a group from the list to start messaging.</p>
+            </div>
+            
+            <div class="chats-window-active hidden" id="chats-window-active">
+              <div class="chats-window-header">
+                <div class="chats-header-info">
+                  <div class="chats-header-avatar" id="chats-header-avatar"><i class="fa-solid fa-user"></i></div>
+                  <div>
+                    <h3 id="chats-header-name" style="margin: 0 0 2px 0;">Active Chat</h3>
+                    <span id="chats-header-status" class="online-dot offline">offline</span>
+                  </div>
+                </div>
+                <div class="chats-header-actions">
+                  <!-- Video call trigger for 1:1 and Group classroom calls -->
+                  <button class="btn btn-accent btn-sm" id="chats-start-call-btn">
+                    <i class="fa-solid fa-video"></i> Start Class
+                  </button>
+                </div>
+              </div>
+              <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
+              <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
+                <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-light); font-family: inherit;">
+                <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
+              </form>
             </div>
           </div>
         </div>
@@ -832,6 +910,36 @@
         Cancel
       </button>
     </div>
+  </div>
+</div>
+
+<!-- =================== CREATE GROUP CHAT MODAL =================== -->
+<div id="create-group-modal" class="modal-overlay hidden">
+  <div class="modal-card glass-card" style="max-width: 450px;">
+    <button class="modal-close-btn" id="close-create-group-btn"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-icon-header">
+      <div class="modal-icon-circle icon-purple"><i class="fa-solid fa-users-gear"></i></div>
+      <h2>Create Study Group</h2>
+      <p>Create a persistent group chat and classroom with your peers.</p>
+    </div>
+    <form id="create-group-form">
+      <div class="form-group">
+        <label for="group-name-input">Group Name</label>
+        <input type="text" id="group-name-input" placeholder="e.g. JavaScript Wizards" required style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-light); margin-top: 6px;">
+      </div>
+      <div class="form-group" style="margin-top: 16px;">
+        <label style="margin-bottom: 8px; display: block; font-weight: 500;">Select Members</label>
+        <div id="create-group-peers-list" class="invite-peers-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2);">
+          <!-- Populated dynamically with matches checkboxes -->
+          <div class="skills-empty-hint">No peers available to invite.</div>
+        </div>
+      </div>
+      <div id="create-group-error" class="error-msg hidden"></div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button type="button" class="btn btn-ghost" id="cancel-create-group-btn">Cancel</button>
+        <button type="submit" class="btn btn-accent" id="submit-create-group-btn"><i class="fa-solid fa-plus"></i> Create Group</button>
+      </div>
+    </form>
   </div>
 </div>
 
