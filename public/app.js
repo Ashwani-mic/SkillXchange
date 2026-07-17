@@ -2320,8 +2320,6 @@ function openReviewModal(sessionId, peerName) {
   hide('review-error');
 }
 
-}
-
 // ==================================================
 //  CHATS & PERSISTENT STUDY GROUPS
 // ==================================================
