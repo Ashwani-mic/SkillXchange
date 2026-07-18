@@ -2409,13 +2409,17 @@ async function loadChatsPage() {
   listContainer.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading chats...</div>';
 
   try {
-    const [groupsData, matchesData] = await Promise.all([
+    const [groupsData, exploreData, matchesData] = await Promise.all([
       api('GET', '/api/groups'),
-      api('GET', '/api/matches')
+      api('GET', '/api/users/explore'),
+      api('GET', '/api/matches').catch(() => ({ matches: [] }))
     ]);
 
     activeGroupsList = groupsData.groups || [];
+    const peers = exploreData.users || [];
     const matches = matchesData.matches || [];
+    const matchIds = new Set(matches.map(m => m.id));
+    const perfectMatchIds = new Set(matches.filter(m => m.match_type === 'perfect').map(m => m.id));
 
     listContainer.innerHTML = '';
 
@@ -2450,20 +2454,33 @@ async function loadChatsPage() {
       });
     }
 
-    // Render direct matched peers section
+    // Render direct matched peers/contacts section
     const peerHeader = document.createElement('div');
     peerHeader.className = 'col-header learn-header';
     peerHeader.style.margin = '16px 0 4px 0';
-    peerHeader.innerHTML = '<i class="fa-solid fa-user-friends"></i> Matched Peers';
+    peerHeader.innerHTML = '<i class="fa-solid fa-user-friends"></i> Contacts & Peers';
     listContainer.appendChild(peerHeader);
 
-    if (matches.length === 0) {
+    if (peers.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'skills-empty-hint';
-      hint.textContent = 'No matches found yet. Add skills to match!';
+      hint.textContent = 'No other users found.';
       listContainer.appendChild(hint);
     } else {
-      matches.forEach(m => {
+      // Sort: perfect matches first, then partial matches, then the rest
+      peers.sort((a, b) => {
+        const aPerfect = perfectMatchIds.has(a.id) ? 1 : 0;
+        const bPerfect = perfectMatchIds.has(b.id) ? 1 : 0;
+        if (aPerfect !== bPerfect) return bPerfect - aPerfect;
+
+        const aMatched = matchIds.has(a.id) ? 1 : 0;
+        const bMatched = matchIds.has(b.id) ? 1 : 0;
+        if (aMatched !== bMatched) return bMatched - aMatched;
+
+        return (a.fullname || a.username).localeCompare(b.fullname || b.username);
+      });
+
+      peers.forEach(m => {
         const item = document.createElement('div');
         item.className = 'chat-item';
         item.dataset.userId = m.id;
@@ -2474,6 +2491,13 @@ async function loadChatsPage() {
           ? `<img src="${m.avatar_url}" alt="avatar">` 
           : `<i class="fa-solid fa-user"></i>`;
 
+        let matchBadgeHtml = '';
+        if (perfectMatchIds.has(m.id)) {
+          matchBadgeHtml = '<span class="chat-item-badge" style="background: var(--accent); margin-left: auto;">⚡ Perfect</span>';
+        } else if (matchIds.has(m.id)) {
+          matchBadgeHtml = '<span class="chat-item-badge" style="background: var(--primary-light); margin-left: auto;">🤝 Match</span>';
+        }
+
         item.innerHTML = `
           <div class="chat-item-avatar">
             ${avatarHtml}
@@ -2481,9 +2505,12 @@ async function loadChatsPage() {
           <div class="chat-item-info">
             <div class="chat-item-name-row">
               <span class="chat-item-name">${m.fullname || m.username}</span>
-              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="font-size: 0.75rem;">${isOnline ? 'online' : 'offline'}</span>
+              ${matchBadgeHtml}
             </div>
-            <span class="chat-item-preview">${m.bio ? m.bio.slice(0, 40) + '...' : 'No bio provided'}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="chat-item-preview">${m.bio ? m.bio.slice(0, 45) + '...' : 'No bio provided'}</span>
+              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="font-size: 0.75rem; margin-left: 6px;">${isOnline ? 'online' : 'offline'}</span>
+            </div>
           </div>
         `;
         item.addEventListener('click', () => selectChat(m.id, m.fullname || m.username, m.avatar_url));
@@ -2620,16 +2647,16 @@ async function openCreateGroupModal() {
   listContainer.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading peers...</div>';
 
   try {
-    const data = await api('GET', '/api/matches');
-    const matches = data.matches || [];
+    const data = await api('GET', '/api/users/explore');
+    const peers = data.users || [];
     
     listContainer.innerHTML = '';
-    if (matches.length === 0) {
-      listContainer.innerHTML = '<div class="skills-empty-hint">No matched peers available to invite.</div>';
+    if (peers.length === 0) {
+      listContainer.innerHTML = '<div class="skills-empty-hint">No other users found.</div>';
       return;
     }
 
-    matches.forEach(m => {
+    peers.forEach(m => {
       const div = document.createElement('div');
       div.style.display = 'flex';
       div.style.alignItems = 'center';

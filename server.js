@@ -947,6 +947,9 @@ io.on('connection', socket => {
   socket.on('group_call_invite', async ({ roomId, invitedUsers, senderName }) => {
     if (!authenticatedUserId) return;
 
+    console.log(`\n📞 [Group Call Invite] Room: ${roomId} | Initiator: ${senderName} (User ID: ${authenticatedUserId})`);
+    console.log(`👥 Invited list:`, invitedUsers);
+
     const room = {
       hostId: authenticatedUserId,
       hostName: senderName,
@@ -960,12 +963,15 @@ io.on('connection', socket => {
       if (id === authenticatedUserId) return;
       const recipientSocketId = onlineUsers.get(id);
       if (recipientSocketId) {
+        console.log(`✉️ Delivering incoming_group_call alert to User ${id} on socket ${recipientSocketId}`);
         io.to(recipientSocketId).emit('incoming_group_call', {
           roomId,
           callerId: authenticatedUserId,
           callerName: senderName,
           invitedUserIds: invitedUsers.map(usr => usr.id)
         });
+      } else {
+        console.log(`⚠️ User ${id} is offline. Inviting into missed call logs.`);
       }
       await db.saveCallLog(authenticatedUserId, id, 'group', 'missed');
     });
