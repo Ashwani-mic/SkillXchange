@@ -263,7 +263,12 @@ app.post('/api/skills', requireAuth, async (req, res) => {
       [req.session.userId, skill_name, skill_type, proficiency_level || 'beginner']
     );
     res.status(201).json({ id: result.id, skill_name, skill_type, proficiency_level });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: `You already have "${skill_name}" as a ${skill_type} skill.` });
+    }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // DELETE /api/skills/:id

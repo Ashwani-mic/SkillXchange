@@ -703,15 +703,21 @@ async function loadDashboard() {
 function initSkillsPanel() {
   el('add-skill-form')?.addEventListener('submit', async e => {
     e.preventDefault();
+    const btn = el('add-skill-submit-btn');
+    if (btn) btn.disabled = true;
     hide('skill-error');
     const skillName = el('skill-name').value;
     const skillType = el('skill-type').value;
     const proficiency = el('skill-proficiency').value;
 
-    if (!skillName) { el('skill-error').textContent = 'Please select a skill.'; show('skill-error'); return; }
+    if (!skillName) {
+      el('skill-error').textContent = 'Please select a skill.';
+      show('skill-error');
+      if (btn) btn.disabled = false;
+      return;
+    }
 
     try {
-      el('add-skill-submit-btn').disabled = true;
       await api('POST', '/api/skills', { skill_name: skillName, skill_type: skillType, proficiency_level: proficiency });
       toast(`✅ "${skillName}" added to your ${skillType === 'teach' ? 'teaching' : 'learning'} list!`, 'success');
       el('skill-name').value = '';
@@ -721,7 +727,7 @@ function initSkillsPanel() {
       el('skill-error').textContent = err.message;
       show('skill-error');
     } finally {
-      el('add-skill-submit-btn').disabled = false;
+      if (btn) btn.disabled = false;
     }
   });
 
@@ -2661,11 +2667,16 @@ async function openCreateGroupModal() {
       div.style.display = 'flex';
       div.style.alignItems = 'center';
       div.style.gap = '10px';
-      div.style.padding = '4px 0';
+      div.style.padding = '6px 0';
       
+      const avatarHtml = m.avatar_url 
+        ? `<img src="${m.avatar_url}" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">` 
+        : `<div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-shrink: 0;"><i class="fa-solid fa-user" style="font-size: 0.85rem;"></i></div>`;
+
       div.innerHTML = `
-        <input type="checkbox" id="group-invite-${m.id}" name="group-member-invite" value="${m.id}">
-        <label for="group-invite-${m.id}" style="font-size: 0.9rem; cursor: pointer; color: var(--text-light);">
+        <input type="checkbox" id="group-invite-${m.id}" name="group-member-invite" value="${m.id}" style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;">
+        ${avatarHtml}
+        <label for="group-invite-${m.id}" style="font-size: 0.95rem; cursor: pointer; color: var(--text-light); flex: 1; margin: 0; display: flex; align-items: center; font-weight: 500;">
           ${m.fullname || m.username}
         </label>
       `;

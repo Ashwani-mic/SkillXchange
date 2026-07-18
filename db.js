@@ -17,7 +17,7 @@ if (!connectionString || hasSuspiciousHost) {
   if (hasSuspiciousHost) {
     console.error('👉 The hostname is parsed as "base". This happens when a malformed connection string starting with "DATABASE_URL=" is parsed by pg-connection-string.');
   }
-  console.error('👉 Please make sure your .env file contains: DATABASE_URL=postgresql://neondb_owner:npg_G2buthBkxF5n@ep-bitter-butterfly-atddgz4q-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=verify-full&channel_binding=require\n');
+  console.error('👉 Please make sure your .env file contains: DATABASE_URL=postgresql://user:password@host/dbname?sslmode=verify-full&channel_binding=require\n');
   process.exit(1);
 }
 
@@ -67,10 +67,12 @@ async function run(sql, params = []) {
   let finalSql = translateQuery(sql);
   const isInsert = finalSql.trim().toUpperCase().startsWith('INSERT');
   
-  // Append RETURNING clause to INSERT statements to mimic lastID (skip id for skill_embeddings)
+  // Append RETURNING clause to INSERT statements to mimic lastID (skip id for skill_embeddings/group_members)
   if (isInsert && !finalSql.toUpperCase().includes('RETURNING')) {
     if (finalSql.toLowerCase().includes('skill_embeddings')) {
       finalSql += ' RETURNING skill_name';
+    } else if (finalSql.toLowerCase().includes('group_members')) {
+      // group_members table has composite key (group_id, user_id) and no id column
     } else {
       finalSql += ' RETURNING id';
     }
