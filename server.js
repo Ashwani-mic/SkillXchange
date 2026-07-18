@@ -84,7 +84,7 @@ app.post('/api/auth/register', async (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
   try {
-    const existing = await db.get('SELECT id FROM users WHERE username = ? OR email = ?', [username.trim(), email.trim()]);
+    const existing = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), email.trim()]);
     if (existing) return res.status(409).json({ error: 'Username or email already taken.' });
 
     const hash = await bcrypt.hash(password, 10);
@@ -112,7 +112,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const user = await db.get(
-      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating, is_verified, password_hash FROM users WHERE username = ?',
+      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating, is_verified, password_hash FROM users WHERE LOWER(username) = LOWER(?)',
       [username.trim()]
     );
     if (!user) return res.status(401).json({ error: 'User not found. Please check your username.' });
