@@ -2320,4 +2320,22 @@ select option, select optgroup {
   }
 }
 
+/* ====== GROUP MEMBERS LIST RESPONSIVENESS ====== */
+.chats-members-sidebar {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 768px) {
+  .chats-members-sidebar {
+    position: absolute;
+    right: 0;
+    top: 70px; /* aligns below the chat header row */
+    height: calc(100% - 70px);
+    z-index: 100;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.65);
+    background: #17161a !important; /* solid fallback match theme background color */
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
 

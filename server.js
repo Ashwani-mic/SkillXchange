@@ -389,20 +389,10 @@ app.post('/api/sessions', requireAuth, async (req, res) => {
   if (parseInt(teacher_id) === req.session.userId) return res.status(400).json({ error: 'You cannot book yourself.' });
 
   try {
-    // Prevent booking without enough credits
-    const user = await db.get('SELECT credits FROM users WHERE id = ?', [req.session.userId]);
-    if (!user || user.credits <= 0) {
-      return res.status(400).json({ error: 'Insufficient credits. You need at least 1 credit to book a session.' });
-    }
-
     const result = await db.run(
       'INSERT INTO skill_sessions (teacher_id, learner_id, skill_name, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       [teacher_id, req.session.userId, skill_name, scheduled_at, 'scheduled']
     );
-    // Deduct a credit using GREATEST to avoid PostgreSQL aggregate function error
-    await db.run('UPDATE users SET credits = GREATEST(0, credits - 1) WHERE id = ?', [req.session.userId]);
-    // Award teacher a credit for booking
-    await db.run('UPDATE users SET credits = credits + 1 WHERE id = ?', [teacher_id]);
     res.status(201).json({ id: result.id, success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -634,6 +624,35 @@ app.get('/api/groups', requireAuth, async (req, res) => {
       ORDER BY g.created_at DESC
     `, [req.session.userId]);
     res.json({ groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/groups/:id — Get details of a single group including its members
+app.get('/api/groups/:id', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  try {
+    const isMember = await db.get(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.session.userId]
+    );
+    if (!isMember) return res.status(403).json({ error: 'Access denied.' });
+
+    const group = await db.get(
+      'SELECT id, name, created_by, created_at FROM groups WHERE id = ?',
+      [groupId]
+    );
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    const members = await db.all(`
+      SELECT u.id, u.username AS name, u.full_name AS fullname, u.avatar_url, gm.role
+      FROM group_members gm
+      JOIN users u ON u.id = gm.user_id
+      WHERE gm.group_id = ?
+    `, [groupId]);
+
+    res.json({ ...group, members });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

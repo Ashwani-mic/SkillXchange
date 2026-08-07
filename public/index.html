@@ -465,27 +465,43 @@
               <p>Select a peer or a group from the list to start messaging.</p>
             </div>
             
-            <div class="chats-window-active hidden" id="chats-window-active">
-              <div class="chats-window-header">
-                <div class="chats-header-info">
-                  <div class="chats-header-avatar" id="chats-header-avatar"><i class="fa-solid fa-user"></i></div>
-                  <div>
-                    <h3 id="chats-header-name" style="margin: 0 0 2px 0;">Active Chat</h3>
-                    <span id="chats-header-status" class="online-dot offline">offline</span>
+            <div class="chats-window-active hidden" id="chats-window-active" style="display: flex; flex-direction: row; height: 100%; width: 100%;">
+              <div class="chats-chat-main" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0;">
+                <div class="chats-window-header">
+                  <div class="chats-header-info">
+                    <div class="chats-header-avatar" id="chats-header-avatar"><i class="fa-solid fa-user"></i></div>
+                    <div>
+                      <h3 id="chats-header-name" style="margin: 0 0 2px 0;">Active Chat</h3>
+                      <span id="chats-header-status" class="online-dot offline">offline</span>
+                    </div>
+                  </div>
+                  <div class="chats-header-actions" style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Video call trigger for 1:1 and Group classroom calls -->
+                    <button class="btn btn-accent btn-sm" id="chats-start-call-btn">
+                      <i class="fa-solid fa-video"></i> Start Class
+                    </button>
+                    <!-- Members Toggle Button -->
+                    <button class="btn btn-ghost btn-sm hidden" id="chats-toggle-members-btn">
+                      <i class="fa-solid fa-users"></i> Members
+                    </button>
                   </div>
                 </div>
-                <div class="chats-header-actions">
-                  <!-- Video call trigger for 1:1 and Group classroom calls -->
-                  <button class="btn btn-accent btn-sm" id="chats-start-call-btn">
-                    <i class="fa-solid fa-video"></i> Start Class
-                  </button>
+                <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
+                <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
+                  <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-light); font-family: inherit;">
+                  <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
+                </form>
+              </div>
+
+              <!-- Group Members Panel -->
+              <div class="chats-members-sidebar hidden" id="chats-members-sidebar" style="width: 240px; flex-shrink: 0; background: rgba(0,0,0,0.15); border-left: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; height: 100%;">
+                <div style="padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between;">
+                  <span><i class="fa-solid fa-users"></i> Members</span>
+                </div>
+                <div id="chats-members-list" style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+                  <!-- Members list items -->
                 </div>
               </div>
-              <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
-              <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
-                <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-light); font-family: inherit;">
-                <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
-              </form>
             </div>
           </div>
         </div>

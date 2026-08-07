@@ -2558,6 +2558,10 @@ async function selectChat(id, name, avatarUrl) {
   const statusEl = el('chats-header-status');
   const callBtn = el('chats-start-call-btn');
 
+  const toggleMembersBtn = el('chats-toggle-members-btn');
+  const membersSidebar = el('chats-members-sidebar');
+  const membersListEl = el('chats-members-list');
+
   if (isGroup) {
     statusEl.textContent = 'Group Chat';
     statusEl.className = 'online-dot online';
@@ -2579,7 +2583,63 @@ async function selectChat(id, name, avatarUrl) {
         toast('Failed to start group call: ' + err.message, 'error');
       }
     };
+
+    // Show toggle button and config members sidebar visibility
+    toggleMembersBtn.classList.remove('hidden');
+    if (window.innerWidth > 768) {
+      membersSidebar.classList.remove('hidden');
+    } else {
+      membersSidebar.classList.add('hidden');
+    }
+
+    toggleMembersBtn.onclick = () => {
+      membersSidebar.classList.toggle('hidden');
+    };
+
+    // Fetch and render actual group members list
+    const groupId = id.replace('group_', '');
+    api('GET', `/api/groups/${groupId}`).then(groupData => {
+      membersListEl.innerHTML = '';
+      if (groupData && Array.isArray(groupData.members)) {
+        groupData.members.forEach(member => {
+          const isMe = member.id === currentUser.id;
+          const isOnline = onlineUserIdsSet.has(member.id);
+          const avatarHtml = member.avatar_url 
+            ? `<img src="${member.avatar_url}" alt="avatar" style="width: 32px; height: 32px; border-radius: 50%;">`
+            : `<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fa-solid fa-user"></i></div>`;
+          
+          const memberItem = document.createElement('div');
+          memberItem.style.display = 'flex';
+          memberItem.style.alignItems = 'center';
+          memberItem.style.gap = '8px';
+          memberItem.style.padding = '6px';
+          memberItem.style.borderRadius = '6px';
+          memberItem.style.background = 'rgba(255,255,255,0.02)';
+          memberItem.innerHTML = `
+            <div style="position: relative;">
+              ${avatarHtml}
+              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border: 1.5px solid var(--bg-dark);"></span>
+            </div>
+            <div style="flex: 1; min-width: 0; font-size: 0.85rem;">
+              <div style="font-weight: 500; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: var(--text-light);">
+                ${member.fullname || member.name} ${isMe ? ' (You)' : ''}
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-dim); text-transform: capitalize;">
+                ${member.role || 'member'}
+              </div>
+            </div>
+          `;
+          membersListEl.appendChild(memberItem);
+        });
+      }
+    }).catch(err => {
+      console.error('Failed to load group members list:', err);
+      membersListEl.innerHTML = '<div style="font-size: 0.85rem; color: var(--accent-red); padding: 8px;">Failed to load roster</div>';
+    });
   } else {
+    toggleMembersBtn.classList.add('hidden');
+    membersSidebar.classList.add('hidden');
+
     const isOnline = onlineUserIdsSet.has(id);
     statusEl.textContent = isOnline ? 'online' : 'offline';
     statusEl.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
