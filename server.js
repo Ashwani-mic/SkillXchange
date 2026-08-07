@@ -389,12 +389,18 @@ app.post('/api/sessions', requireAuth, async (req, res) => {
   if (parseInt(teacher_id) === req.session.userId) return res.status(400).json({ error: 'You cannot book yourself.' });
 
   try {
+    // Prevent booking without enough credits
+    const user = await db.get('SELECT credits FROM users WHERE id = ?', [req.session.userId]);
+    if (!user || user.credits <= 0) {
+      return res.status(400).json({ error: 'Insufficient credits. You need at least 1 credit to book a session.' });
+    }
+
     const result = await db.run(
       'INSERT INTO skill_sessions (teacher_id, learner_id, skill_name, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       [teacher_id, req.session.userId, skill_name, scheduled_at, 'scheduled']
     );
-    // Deduct a credit
-    await db.run('UPDATE users SET credits = MAX(0, credits - 1) WHERE id = ?', [req.session.userId]);
+    // Deduct a credit using GREATEST to avoid PostgreSQL aggregate function error
+    await db.run('UPDATE users SET credits = GREATEST(0, credits - 1) WHERE id = ?', [req.session.userId]);
     // Award teacher a credit for booking
     await db.run('UPDATE users SET credits = credits + 1 WHERE id = ?', [teacher_id]);
     res.status(201).json({ id: result.id, success: true });
@@ -412,6 +418,12 @@ app.put('/api/sessions/:id/status', requireAuth, async (req, res) => {
       [req.params.id, req.session.userId, req.session.userId]
     );
     if (!session) return res.status(404).json({ error: 'Session not found.' });
+
+    // Prevent double status updates to secure credit transactions
+    if (session.status === status) {
+      return res.json({ success: true, message: 'Status already up-to-date.' });
+    }
+
     await db.run('UPDATE skill_sessions SET status = ? WHERE id = ?', [status, req.params.id]);
     if (status === 'completed') {
       // Award credits for completion
