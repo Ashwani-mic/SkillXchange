@@ -300,7 +300,7 @@
             <div class="section-card glass-card" id="skills-card-anchor">
               <div class="section-card-header">
                 <h2><i class="fa-solid fa-graduation-cap"></i> My Skills Barter</h2>
-                <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="section-card-header-actions">
                   <button type="button" id="ai-extract-skills-btn" class="btn btn-ghost btn-sm" style="font-size: 0.75rem; padding: 4px 8px; display: flex; align-items: center; gap: 4px; border: 1px dashed rgba(139,92,246,0.4);" title="Auto-extract skills from your bio using AI">
                     <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary-light);"></i> AI Suggest
                   </button>
@@ -465,10 +465,14 @@
               <p>Select a peer or a group from the list to start messaging.</p>
             </div>
             
-            <div class="chats-window-active hidden" id="chats-window-active" style="display: flex; flex-direction: row; height: 100%; width: 100%;">
+            <div class="chats-window-active hidden" id="chats-window-active">
               <div class="chats-chat-main" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0;">
                 <div class="chats-window-header">
                   <div class="chats-header-info">
+                    <!-- Back button shown on mobile only -->
+                    <button class="chats-back-btn" id="chats-back-btn" title="Back to chats">
+                      <i class="fa-solid fa-arrow-left"></i> Back
+                    </button>
                     <div class="chats-header-avatar" id="chats-header-avatar"><i class="fa-solid fa-user"></i></div>
                     <div>
                       <h3 id="chats-header-name" style="margin: 0 0 2px 0;">Active Chat</h3>
@@ -488,7 +492,7 @@
                 </div>
                 <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
                 <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
-                  <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-light); font-family: inherit;">
+                  <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-primary); font-family: inherit;">
                   <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
                 </form>
               </div>
@@ -941,7 +945,7 @@
     <form id="create-group-form">
       <div class="form-group">
         <label for="group-name-input">Group Name</label>
-        <input type="text" id="group-name-input" placeholder="e.g. JavaScript Wizards" required style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-light); margin-top: 6px;">
+        <input type="text" id="group-name-input" placeholder="e.g. JavaScript Wizards" required style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-primary); margin-top: 6px;">
       </div>
       <div class="form-group" style="margin-top: 16px;">
         <label style="margin-bottom: 8px; display: block; font-weight: 500;">Select Members</label>

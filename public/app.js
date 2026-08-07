@@ -20,6 +20,7 @@ let groupRoomId = null;
 let activeCallPartnerId = null;
 let groupPeerConnections = {}; // socketId -> RTCPeerConnection
 let groupParticipants = []; // array of { userId, socketId, userName, status }
+let classroomGroupMembers = []; // array of candidates that can be invited
 const onlineUserIdsSet = new Set();
 
 // WebRTC ICE Candidate Queues to prevent race conditions during signaling
@@ -1740,6 +1741,7 @@ function endCallLocal() {
   
   globalIceQueue = [];
   groupIceQueues = {};
+  classroomGroupMembers = [];
   
   const videoGrid = el('classroom-video-feeds');
   videoGrid.innerHTML = `
@@ -1829,7 +1831,7 @@ async function startGroupCall(invitedUsers) {
     groupParticipants.push({ userId: u.id, userName: u.name, status: 'invited' });
   });
   
-  updateGroupParticipantsList();
+  loadClassroomCandidates();
   toast('Group call started!', 'success');
 }
 
@@ -1880,7 +1882,7 @@ async function joinGroupCall(roomId, initiatorName) {
   groupParticipants = [
     { userId: currentUser.id, userName: currentUser.fullname || currentUser.username, status: 'connected' }
   ];
-  updateGroupParticipantsList();
+  loadClassroomCandidates();
 }
 
 function createPeerFeedContainer(peerSocketId, peerUserName) {
@@ -1995,26 +1997,110 @@ function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e) {
   updateGroupParticipantsList();
 }
 
+function invitePeerToClassroom(userId, userName) {
+  socket.emit('group_call_invite', {
+    roomId: groupRoomId,
+    invitedUsers: [{ id: userId, name: userName }],
+    senderName: currentUser.fullname || currentUser.username
+  });
+  
+  if (!groupParticipants.some(p => p.userId === userId)) {
+    groupParticipants.push({ userId, userName, status: 'invited' });
+  }
+  updateGroupParticipantsList();
+  toast(`Invitation sent to ${userName}!`, 'success');
+}
+
+async function loadClassroomCandidates() {
+  if (classroomGroupMembers && classroomGroupMembers.length > 0) {
+    updateGroupParticipantsList();
+    return;
+  }
+  try {
+    const data = await api('GET', '/api/users/explore');
+    classroomGroupMembers = data.users
+      .filter(u => u.id !== currentUser.id)
+      .map(u => ({ id: u.id, name: u.fullname || u.username }));
+    updateGroupParticipantsList();
+  } catch (err) {
+    console.error('Failed to load classroom candidates:', err);
+  }
+}
+
 function updateGroupParticipantsList() {
   const list = el('classroom-participants-list');
   if (!list) return;
   
   list.innerHTML = '';
-  let count = 0;
   
-  groupParticipants.forEach(p => {
-    if (p.status === 'connected' || p.status === 'host') count++;
-    
-    const item = document.createElement('li');
-    item.className = 'participant-item';
-    item.innerHTML = `
-      <span class="participant-name">${p.userName}</span>
-      <span class="participant-badge ${p.status}">${p.status}</span>
+  const hosts    = groupParticipants.filter(p => p.status === 'host');
+  const active   = groupParticipants.filter(p => p.status === 'connected');
+  const pending  = groupParticipants.filter(p => p.status === 'invited');
+  const activeCount = hosts.length + active.length;
+
+  const makeItem = (p, label, badgeClass) => {
+    const li = document.createElement('li');
+    li.className = 'participant-item';
+    li.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+        <div style="width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: #fff; flex-shrink: 0;">
+          <i class="fa-solid fa-user"></i>
+        </div>
+        <span class="participant-name">${p.userName}</span>
+      </div>
+      <span class="participant-badge ${badgeClass}">${label}</span>
     `;
-    list.appendChild(item);
-  });
-  
-  el('participants-count').textContent = count;
+    return li;
+  };
+
+  // Section: In the Call
+  if (hosts.length || active.length) {
+    const secLabel = document.createElement('div');
+    secLabel.className = 'participants-section-label';
+    secLabel.innerHTML = '<i class="fa-solid fa-signal"></i> In the Call';
+    list.appendChild(secLabel);
+    hosts.forEach(p => list.appendChild(makeItem(p, 'Host', 'host')));
+    active.forEach(p => list.appendChild(makeItem(p, 'Joined', 'connected')));
+  }
+
+  // Section: Awaiting Response
+  if (pending.length) {
+    const secLabel = document.createElement('div');
+    secLabel.className = 'participants-section-label';
+    secLabel.innerHTML = '<i class="fa-solid fa-clock"></i> Awaiting Response';
+    list.appendChild(secLabel);
+    pending.forEach(p => list.appendChild(makeItem(p, 'Invited', 'invited')));
+  }
+
+  // Section: Available to Invite
+  const nonInvited = classroomGroupMembers.filter(m => !groupParticipants.some(p => p.userId === m.id));
+  if (nonInvited.length) {
+    const secLabel = document.createElement('div');
+    secLabel.className = 'participants-section-label';
+    secLabel.style.marginTop = '12px';
+    secLabel.innerHTML = '<i class="fa-solid fa-user-plus"></i> Available to Invite';
+    list.appendChild(secLabel);
+    
+    nonInvited.forEach(p => {
+      const li = document.createElement('li');
+      li.className = 'participant-item';
+      li.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 10px;';
+      li.innerHTML = `
+        <span class="participant-name" style="color: var(--text-muted);">${p.name}</span>
+        <button class="invite-btn" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px; background: var(--primary); color: #fff; border: none; cursor: pointer; font-weight: 600;">Invite</button>
+      `;
+      li.querySelector('.invite-btn').onclick = () => {
+        invitePeerToClassroom(p.id, p.name);
+      };
+      list.appendChild(li);
+    });
+  }
+
+  if (!groupParticipants.length && !nonInvited.length) {
+    list.innerHTML = '<li style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 16px;">No participants yet.</li>';
+  }
+
+  el('participants-count').textContent = activeCount;
 }
 
 function openGroupCallModal() {
@@ -2057,25 +2143,47 @@ function openGroupCallModal() {
       
       sortedPeers.forEach(peer => {
         const isOnline = onlineUserIdsSet.has(peer.id);
-        const item = document.createElement('label');
-        item.className = 'invite-peer-checkbox-item';
-        if (!isOnline) {
-          item.style.opacity = '0.6';
-        }
         const displayName = peer.fullname || peer.username;
-        item.innerHTML = `
-          <input type="checkbox" name="invite-peer" value="${peer.id}" data-name="${displayName}">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%;">
-            <span class="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: ${isOnline ? 'var(--emerald)' : 'var(--text-muted)'}; display: inline-block;"></span>
-            <span><strong>${displayName}</strong> (${peer.teach_skills || 'Tutor'})</span>
-            <span style="margin-left: auto; font-size: 0.75rem; color: ${isOnline ? 'var(--emerald-light)' : 'var(--text-muted)'};">${isOnline ? 'Online' : 'Offline'}</span>
-          </span>
-        `;
-        item.querySelector('input').addEventListener('change', () => {
-          const checked = document.querySelectorAll('input[name="invite-peer"]:checked').length;
-          if (submitBtn) submitBtn.disabled = checked === 0;
-        });
-        listContainer.appendChild(item);
+        
+        // Check if this user is already a participant in the active call
+        const existingP = (isGroupCall && groupRoomId)
+          ? groupParticipants.find(p => p.userId === peer.id)
+          : null;
+
+        if (existingP) {
+          // Already in call or invited — show status badge, no checkbox
+          const statusMap = {
+            host:      { label: 'Host',      color: 'var(--primary-light)', bg: 'rgba(139,92,246,0.12)' },
+            connected: { label: 'Active',    color: 'var(--success)',       bg: 'rgba(16,185,129,0.12)' },
+            invited:   { label: 'Invited',   color: 'var(--warning)',       bg: 'rgba(245,158,11,0.12)' },
+          };
+          const s = statusMap[existingP.status] || { label: existingP.status, color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' };
+          const row = document.createElement('div');
+          row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; border-bottom: 1px solid var(--border-subtle);';
+          row.innerHTML = `
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">${displayName}</span>
+            <span style="font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 5px; background: ${s.bg}; color: ${s.color};">${s.label}</span>
+          `;
+          listContainer.appendChild(row);
+        } else {
+          // Not yet in call — show checkbox so user can invite
+          const item = document.createElement('label');
+          item.className = 'invite-peer-checkbox-item';
+          if (!isOnline) item.style.opacity = '0.6';
+          item.innerHTML = `
+            <input type="checkbox" name="invite-peer" value="${peer.id}" data-name="${displayName}">
+            <span style="display: flex; align-items: center; gap: 8px; width: 100%;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${isOnline ? 'var(--success)' : 'var(--text-muted)'}; display: inline-block; flex-shrink: 0;"></span>
+              <span style="flex: 1;"><strong>${displayName}</strong></span>
+              <span style="font-size: 0.75rem; color: ${isOnline ? 'var(--success)' : 'var(--text-muted)'}">${isOnline ? 'Online' : 'Offline'}</span>
+            </span>
+          `;
+          item.querySelector('input').addEventListener('change', () => {
+            const checked = document.querySelectorAll('input[name="invite-peer"]:checked').length;
+            if (submitBtn) submitBtn.disabled = checked === 0;
+          });
+          listContainer.appendChild(item);
+        }
       });
       if (submitBtn) submitBtn.disabled = true;
     })
@@ -2343,6 +2451,15 @@ function initChatsPage() {
     if (e.target === el('create-group-modal')) hide('create-group-modal');
   });
 
+  // Mobile back button — return to chats sidebar list
+  el('chats-back-btn')?.addEventListener('click', () => {
+    if (window.innerWidth <= 900) {
+      el('chats-list-container')?.closest('.chats-sidebar')?.classList.remove('mobile-hidden');
+      el('chats-window')?.classList.add('mobile-hidden');
+      currentActiveChatId = null;
+    }
+  });
+
   el('create-group-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     hide('create-group-error');
@@ -2514,8 +2631,8 @@ async function loadChatsPage() {
               ${matchBadgeHtml}
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span class="chat-item-preview">${m.bio ? m.bio.slice(0, 45) + '...' : 'No bio provided'}</span>
-              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="font-size: 0.75rem; margin-left: 6px;">${isOnline ? 'online' : 'offline'}</span>
+              <span class="chat-item-preview">${m.bio ? m.bio.slice(0, 40) + '...' : 'No bio provided'}</span>
+              <span class="status-only-dot ${isOnline ? 'online' : 'offline'}" style="flex-shrink: 0; margin-left: 6px;"></span>
             </div>
           </div>
         `;
@@ -2530,6 +2647,12 @@ async function loadChatsPage() {
 
 async function selectChat(id, name, avatarUrl) {
   currentActiveChatId = id;
+
+  // On mobile: hide sidebar, show only chat window
+  if (window.innerWidth <= 900) {
+    el('chats-list-container')?.closest('.chats-sidebar')?.classList.add('mobile-hidden');
+    el('chats-window')?.classList.remove('mobile-hidden');
+  }
   
   // Highlight active chat item
   qsa('.chat-item').forEach(item => {
@@ -2570,15 +2693,11 @@ async function selectChat(id, name, avatarUrl) {
       const groupId = id.replace('group_', '');
       try {
         const membersData = await api('GET', `/api/groups/${groupId}/members`);
-        const invitedUsers = membersData.members
+        classroomGroupMembers = membersData.members
           .filter(m => m.id !== currentUser.id)
-          .map(m => ({ id: m.id, name: m.name }));
+          .map(m => ({ id: m.id, name: m.fullname || m.name || m.username }));
         
-        if (invitedUsers.length === 0) {
-          toast('No other members in this group to invite.', 'warning');
-          return;
-        }
-        await startGroupCall(invitedUsers);
+        await startGroupCall([]);
       } catch (err) {
         toast('Failed to start group call: ' + err.message, 'error');
       }
@@ -2606,25 +2725,22 @@ async function selectChat(id, name, avatarUrl) {
           const isOnline = onlineUserIdsSet.has(member.id);
           const avatarHtml = member.avatar_url 
             ? `<img src="${member.avatar_url}" alt="avatar" style="width: 32px; height: 32px; border-radius: 50%;">`
-            : `<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fa-solid fa-user"></i></div>`;
+            : `<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fa-solid fa-user"></i></div>`;
           
           const memberItem = document.createElement('div');
-          memberItem.style.display = 'flex';
-          memberItem.style.alignItems = 'center';
-          memberItem.style.gap = '8px';
-          memberItem.style.padding = '6px';
-          memberItem.style.borderRadius = '6px';
-          memberItem.style.background = 'rgba(255,255,255,0.02)';
+          memberItem.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);';
+          const dotColor  = isOnline ? '#10b981' : '#475569';
+          const dotShadow = isOnline ? 'box-shadow: 0 0 5px #10b981;' : '';
           memberItem.innerHTML = `
-            <div style="position: relative;">
+            <div style="position: relative; flex-shrink: 0;">
               ${avatarHtml}
-              <span class="online-dot ${isOnline ? 'online' : 'offline'}" style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border: 1.5px solid var(--bg-dark);"></span>
+              <div style="position: absolute; bottom: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%; background: ${dotColor}; border: 2px solid #0a0e1a; ${dotShadow}"></div>
             </div>
-            <div style="flex: 1; min-width: 0; font-size: 0.85rem;">
-              <div style="font-weight: 500; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: var(--text-light);">
-                ${member.fullname || member.name} ${isMe ? ' (You)' : ''}
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 0.88rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f1f5f9;">
+                ${member.fullname || member.name}${isMe ? ' <span style="color:#8b5cf6; font-size:0.78rem;">(You)</span>' : ''}
               </div>
-              <div style="font-size: 0.75rem; color: var(--text-dim); text-transform: capitalize;">
+              <div style="font-size: 0.75rem; color: #64748b; text-transform: capitalize; margin-top: 2px;">
                 ${member.role || 'member'}
               </div>
             </div>
@@ -2634,7 +2750,7 @@ async function selectChat(id, name, avatarUrl) {
       }
     }).catch(err => {
       console.error('Failed to load group members list:', err);
-      membersListEl.innerHTML = '<div style="font-size: 0.85rem; color: var(--accent-red); padding: 8px;">Failed to load roster</div>';
+      membersListEl.innerHTML = '<div style="font-size: 0.85rem; color: var(--danger); padding: 8px;">Failed to load roster</div>';
     });
   } else {
     toggleMembersBtn.classList.add('hidden');
@@ -2736,7 +2852,7 @@ async function openCreateGroupModal() {
       div.innerHTML = `
         <input type="checkbox" id="group-invite-${m.id}" name="group-member-invite" value="${m.id}" style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;">
         ${avatarHtml}
-        <label for="group-invite-${m.id}" style="font-size: 0.95rem; cursor: pointer; color: var(--text-light); flex: 1; margin: 0; display: flex; align-items: center; font-weight: 500;">
+        <label for="group-invite-${m.id}" style="font-size: 0.95rem; cursor: pointer; color: var(--text-primary); flex: 1; margin: 0; display: flex; align-items: center; font-weight: 500;">
           ${m.fullname || m.username}
         </label>
       `;
