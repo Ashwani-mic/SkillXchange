@@ -601,13 +601,17 @@ function initSocketIO() {
 
 function updateUserPresenceUI(userId, isOnline) {
   userId = parseInt(userId);
+  
+  // 1. Update active chat partner status in the chat header
   if (activeChat.partnerId === userId) {
-    const statusDot = el('chat-partner-status');
+    const statusDot = el('chats-header-status');
     if (statusDot) {
       statusDot.textContent = isOnline ? 'online' : 'offline';
       statusDot.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
     }
   }
+  
+  // 2. Update peer profile modal status if open
   if (el('peer-profile-modal') && !el('peer-profile-modal').classList.contains('hidden')) {
     const modalChatBtn = el('modal-chat-btn');
     if (modalChatBtn && parseInt(modalChatBtn.dataset.id) === userId) {
@@ -619,17 +623,41 @@ function updateUserPresenceUI(userId, isOnline) {
     }
   }
   
+  // 3. Update Discover page peer cards
   const userCards = qsa('.peer-card');
   userCards.forEach(card => {
     const viewBtn = card.querySelector('[data-action="profile"]');
     if (viewBtn && parseInt(viewBtn.dataset.id) === userId) {
       let badge = card.querySelector('.match-badge');
       if (badge) {
-        badge.style.border = isOnline ? '1px solid var(--emerald)' : '';
+        badge.style.border = isOnline ? '1px solid var(--success)' : '';
         badge.innerHTML = isOnline ? '🟢 Online' : (badge.classList.contains('perfect') ? '⚡ Perfect Match' : badge.classList.contains('partial') ? '🤝 Partial Match' : '👤 Peer');
       }
     }
   });
+
+  // 4. Update Chat list (left sidebar)
+  const chatItem = document.querySelector(`.chat-item[data-user-id="${userId}"]`);
+  if (chatItem) {
+    const dot = chatItem.querySelector('.status-only-dot');
+    if (dot) {
+      dot.className = `status-only-dot ${isOnline ? 'online' : 'offline'}`;
+    }
+  }
+
+  // 5. Update Group Members list inside the active chat if it exists
+  const groupMemberDot = document.querySelector(`.member-online-dot[data-user-id="${userId}"]`);
+  if (groupMemberDot) {
+    const dotColor  = isOnline ? '#10b981' : '#475569';
+    const dotShadow = isOnline ? 'box-shadow: 0 0 5px #10b981;' : 'box-shadow: none;';
+    groupMemberDot.style.background = dotColor;
+    groupMemberDot.style.boxShadow = dotShadow;
+  }
+
+  // 6. Update Classroom Candidates / invite list
+  if (isGroupCall && groupRoomId) {
+    updateGroupParticipantsList();
+  }
 }
 
 // ==================================================
@@ -895,9 +923,10 @@ async function loadMySkills() {
 function renderSkillPill(skill) {
   const div = document.createElement('div');
   div.className = 'skill-pill';
+  div.title = skill.skill_name;
   div.innerHTML = `
     <span class="skill-pill-name">
-      <span>${skill.skill_name}</span>
+      <span title="${skill.skill_name}">${skill.skill_name}</span>
       <span class="skill-prof ${skill.proficiency_level}">${skill.proficiency_level}</span>
     </span>
     <button class="skill-del-btn" title="Remove skill" data-id="${skill.id}"><i class="fa-solid fa-xmark"></i></button>
@@ -2039,13 +2068,15 @@ function updateGroupParticipantsList() {
   const activeCount = hosts.length + active.length;
 
   const makeItem = (p, label, badgeClass) => {
+    const avatarHtml = p.avatarUrl
+      ? `<img src="${p.avatarUrl}" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
+      : `<div style="width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: #fff; flex-shrink: 0;"><i class="fa-solid fa-user"></i></div>`;
+
     const li = document.createElement('li');
     li.className = 'participant-item';
     li.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
-        <div style="width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: #fff; flex-shrink: 0;">
-          <i class="fa-solid fa-user"></i>
-        </div>
+        ${avatarHtml}
         <span class="participant-name">${p.userName}</span>
       </div>
       <span class="participant-badge ${badgeClass}">${label}</span>
@@ -2680,6 +2711,7 @@ async function selectChat(id, name, avatarUrl) {
 
   const statusEl = el('chats-header-status');
   const callBtn = el('chats-start-call-btn');
+  const deleteGroupBtn = el('chats-delete-group-btn');
 
   const toggleMembersBtn = el('chats-toggle-members-btn');
   const membersSidebar = el('chats-members-sidebar');
@@ -2719,7 +2751,16 @@ async function selectChat(id, name, avatarUrl) {
     const groupId = id.replace('group_', '');
     api('GET', `/api/groups/${groupId}`).then(groupData => {
       membersListEl.innerHTML = '';
+      
+      const isOwner = groupData.created_by === currentUser.id;
+      let isAdmin = false;
+      
       if (groupData && Array.isArray(groupData.members)) {
+        const meInGroup = groupData.members.find(m => m.id === currentUser.id);
+        if (meInGroup && meInGroup.role === 'admin') {
+          isAdmin = true;
+        }
+
         groupData.members.forEach(member => {
           const isMe = member.id === currentUser.id;
           const isOnline = onlineUserIdsSet.has(member.id);
@@ -2734,7 +2775,7 @@ async function selectChat(id, name, avatarUrl) {
           memberItem.innerHTML = `
             <div style="position: relative; flex-shrink: 0;">
               ${avatarHtml}
-              <div style="position: absolute; bottom: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%; background: ${dotColor}; border: 2px solid #0a0e1a; ${dotShadow}"></div>
+              <div class="member-online-dot" data-user-id="${member.id}" style="position: absolute; bottom: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%; background: ${dotColor}; border: 2px solid #0a0e1a; ${dotShadow}"></div>
             </div>
             <div style="flex: 1; min-width: 0;">
               <div style="font-size: 0.88rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f1f5f9;">
@@ -2748,13 +2789,40 @@ async function selectChat(id, name, avatarUrl) {
           membersListEl.appendChild(memberItem);
         });
       }
+
+      // Configure delete group button visibility
+      if (deleteGroupBtn) {
+        if (isOwner || isAdmin) {
+          deleteGroupBtn.classList.remove('hidden');
+          deleteGroupBtn.onclick = () => {
+            const confirmed = confirm('Are you sure you want to delete this group? This action cannot be undone.');
+            if (confirmed) {
+              api('DELETE', `/api/groups/${groupId}`)
+                .then(() => {
+                  toast('Group deleted successfully.', 'success');
+                  hide('chats-window-active');
+                  show('chats-window-empty');
+                  currentActiveChatId = null;
+                  loadChatPanel();
+                })
+                .catch(err => {
+                  toast('Failed to delete group: ' + err.message, 'error');
+                });
+            }
+          };
+        } else {
+          deleteGroupBtn.classList.add('hidden');
+        }
+      }
     }).catch(err => {
       console.error('Failed to load group members list:', err);
       membersListEl.innerHTML = '<div style="font-size: 0.85rem; color: var(--danger); padding: 8px;">Failed to load roster</div>';
+      if (deleteGroupBtn) deleteGroupBtn.classList.add('hidden');
     });
   } else {
     toggleMembersBtn.classList.add('hidden');
     membersSidebar.classList.add('hidden');
+    if (deleteGroupBtn) deleteGroupBtn.classList.add('hidden');
 
     const isOnline = onlineUserIdsSet.has(id);
     statusEl.textContent = isOnline ? 'online' : 'offline';

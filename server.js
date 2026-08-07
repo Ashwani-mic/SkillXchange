@@ -753,42 +753,80 @@ app.get('/api/groups/:id/members', requireAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/groups/:id — Delete a group (owner/admin only)
+app.delete('/api/groups/:id', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  const userId = req.session.userId;
+  try {
+    // 1. Verify if group exists and if current user is owner or admin of the group
+    const group = await db.get('SELECT created_by FROM groups WHERE id = ?', [groupId]);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found.' });
+    }
+    
+    const member = await db.get(
+      'SELECT role FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    );
+    
+    const isCreator = group.created_by === userId;
+    const isAdmin = member && member.role === 'admin';
+    
+    if (!isCreator && !isAdmin) {
+      return res.status(403).json({ error: 'Only group owners or admins can delete this group.' });
+    }
+
+    // 2. Delete group (cascades to group_members and group_messages)
+    await db.run('DELETE FROM groups WHERE id = ?', [groupId]);
+
+    res.json({ success: true, message: 'Group deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete group: ' + err.message });
+  }
+});
+
 // =====================================================
 //  SOCKET.IO — REAL-TIME EVENTS
 // =====================================================
 const groupRooms = new Map(); // roomId -> { hostId, hostName, invitedUsers: Array<{id, name}>, connectedUsers: Map(socketId -> {userId, userName}) }
 
-function rebuildParticipantsList(room) {
+async function rebuildParticipantsList(room) {
   const participantsList = [];
   // Host
+  const host = await db.get('SELECT avatar_url FROM users WHERE id = ?', [room.hostId]);
   participantsList.push({
     userId: room.hostId,
     userName: room.hostName,
+    avatarUrl: host ? host.avatar_url : null,
     status: 'host'
   });
   // Invited but not connected
-  room.invitedUsers.forEach(u => {
+  for (const u of room.invitedUsers) {
     if (u.id !== room.hostId) {
       const isConnected = Array.from(room.connectedUsers.values()).some(cu => cu.userId === u.id);
       if (!isConnected) {
+        const user = await db.get('SELECT avatar_url FROM users WHERE id = ?', [u.id]);
         participantsList.push({
           userId: u.id,
           userName: u.name,
+          avatarUrl: user ? user.avatar_url : null,
           status: 'invited'
         });
       }
     }
-  });
+  }
   // Connected users (except host)
-  room.connectedUsers.forEach((u) => {
+  for (const u of room.connectedUsers.values()) {
     if (u.userId !== room.hostId) {
+      const user = await db.get('SELECT avatar_url FROM users WHERE id = ?', [u.userId]);
       participantsList.push({
         userId: u.userId,
         userName: u.userName,
+        avatarUrl: user ? user.avatar_url : null,
         status: 'connected'
       });
     }
-  });
+  }
   return participantsList;
 }
 
@@ -1013,7 +1051,7 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('join_group_room', ({ roomId, userName }) => {
+  socket.on('join_group_room', async ({ roomId, userName }) => {
     if (!authenticatedUserId) return;
     socket.join(roomId);
 
@@ -1037,7 +1075,7 @@ io.on('connection', socket => {
     });
 
     // Broadcast updated participants list to everyone in the room
-    const participantsList = rebuildParticipantsList(room);
+    const participantsList = await rebuildParticipantsList(room);
     io.to(roomId).emit('group_participants_update', participantsList);
     console.log(`User ${authenticatedUserId} joined group room ${roomId} (socket: ${socket.id})`);
   });
@@ -1055,13 +1093,13 @@ io.on('connection', socket => {
     await db.saveCallLog(parseInt(initiatorId), authenticatedUserId, 'group', 'rejected');
   });
 
-  socket.on('leave_group_room', ({ roomId }) => {
+  socket.on('leave_group_room', async ({ roomId }) => {
     socket.leave(roomId);
 
     const room = groupRooms.get(roomId);
     if (room) {
       room.connectedUsers.delete(socket.id);
-      const participantsList = rebuildParticipantsList(room);
+      const participantsList = await rebuildParticipantsList(room);
       io.to(roomId).emit('group_participants_update', participantsList);
     }
 
@@ -1073,7 +1111,7 @@ io.on('connection', socket => {
   });
 
   // Disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     if (authenticatedUserId) {
       if (onlineUsers.get(authenticatedUserId) === socket.id) {
         onlineUsers.delete(authenticatedUserId);
@@ -1082,17 +1120,17 @@ io.on('connection', socket => {
       }
 
       // Cleanup group rooms
-      groupRooms.forEach((room, roomId) => {
+      for (const [roomId, room] of groupRooms.entries()) {
         if (room.connectedUsers.has(socket.id)) {
           room.connectedUsers.delete(socket.id);
-          const participantsList = rebuildParticipantsList(room);
+          const participantsList = await rebuildParticipantsList(room);
           io.to(roomId).emit('group_participants_update', participantsList);
           socket.to(roomId).emit('group_user_left', {
             socketId: socket.id,
             userId: authenticatedUserId
           });
         }
-      });
+      }
     }
   });
 });
