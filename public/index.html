@@ -495,10 +495,30 @@
                   </div>
                 </div>
                 <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
-                <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px;">
+                <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px; align-items: center;">
+                  <!-- Hidden File Input -->
+                  <input type="file" id="chats-file-input" style="display: none;">
+                  <!-- Attach Button -->
+                  <button type="button" class="btn btn-ghost round-btn" id="chats-attach-btn" title="Attach photo or document" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--text-muted);"><i class="fa-solid fa-paperclip"></i></button>
                   <input type="text" id="chats-message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 20px; color: var(--text-primary); font-family: inherit;">
-                  <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0;"><i class="fa-solid fa-paper-plane"></i></button>
+                  <button type="submit" class="btn btn-accent round-btn" style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;"><i class="fa-solid fa-paper-plane"></i></button>
                 </form>
+
+                <!-- File Preview Overlay (Preview before send) -->
+                <div id="chats-file-preview-overlay" class="hidden" style="position: absolute; inset: 0; background: #0b0f19; z-index: 1006; display: flex; flex-direction: column; justify-content: space-between; padding: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                    <h3 style="margin: 0; color: #fff;"><i class="fa-solid fa-file-arrow-up"></i> Send Attachment</h3>
+                    <button type="button" id="chats-preview-cancel-btn" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+                  </div>
+                  <div id="chats-preview-body" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow: hidden;"></div>
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="text" id="chats-preview-caption" placeholder="Add a caption..." autocomplete="off" style="width: 100%; padding: 12px 16px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 24px; color: var(--text-primary); font-family: inherit;">
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                      <button type="button" class="btn btn-ghost" id="chats-preview-discard-btn">Discard</button>
+                      <button type="button" class="btn btn-accent" id="chats-preview-send-btn"><i class="fa-solid fa-paper-plane"></i> Send</button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- Group Members Panel -->
@@ -968,6 +988,12 @@
       </div>
     </form>
   </div>
+</div>
+
+<!-- Image Viewer Overlay -->
+<div id="image-viewer-overlay" class="modal-overlay hidden" style="background: rgba(0,0,0,0.95); z-index: 10000; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0;">
+  <button class="modal-close-btn" id="close-image-viewer-btn" style="top: 20px; right: 20px; font-size: 2rem; background: transparent; border: none; color: #fff; cursor: pointer; position: absolute;"><i class="fa-solid fa-xmark"></i></button>
+  <img id="viewer-img" src="" style="max-width: 95vw; max-height: 95dvh; object-fit: contain; border-radius: 8px;">
 </div>
 
 <!-- Toast Notification Container -->

@@ -2674,30 +2674,164 @@ select option, select optgroup {
   border: none !important;
 }
 
-/* ====== MOBILE CONTROLS SAFE AREA & VIEWPORT ADAPTATIONS ====== */
+/* ====== MOBILE EXPERIENCE LAYOUT OVERRIDES ====== */
 @media (max-width: 768px) {
-  .classroom-header {
-    height: auto !important;
-    flex-direction: column !important;
-    padding: 12px 16px !important;
-    gap: 8px !important;
+  /* 1. Hide outer navigation bar and header when chat or call is active */
+  body.mobile-chat-active .app-header-nav,
+  body.mobile-chat-active .app-header,
+  body.mobile-call-active .app-header-nav,
+  body.mobile-call-active .app-header {
+    display: none !important;
   }
+
+  /* 2. Hide in-app back button to enforce device native back navigation */
+  .chats-back-btn {
+    display: none !important;
+  }
+
+  /* 3. Call overlay FaceTime/WhatsApp style container */
+  .classroom-container {
+    position: relative;
+    height: 100dvh !important;
+    width: 100vw !important;
+    overflow: hidden;
+  }
+
+  /* 4. Top Transparent Header overlay */
+  .classroom-header {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 60px !important;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent) !important;
+    border-bottom: none !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    z-index: 100 !important;
+    padding: 0 16px !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
   .classroom-brand {
     display: none !important;
   }
+
   .classroom-timer-row {
     width: 100% !important;
     justify-content: space-between !important;
+    flex-grow: 1 !important;
   }
+
+  /* 5. Bottom Docked Call Controls overlay */
   .classroom-header-controls {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
     width: 100% !important;
+    height: auto !important;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent) !important;
+    padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 16px)) !important;
+    display: flex !important;
     justify-content: center !important;
     flex-wrap: wrap !important;
-    gap: 8px !important;
-    padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+    gap: 12px !important;
+    z-index: 100 !important;
+    border: none !important;
   }
+
   .classroom-header-controls .ctrl-btn {
     flex: 0 0 auto !important;
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 50% !important;
+    font-size: 1.05rem !important;
+    background: rgba(255,255,255,0.15) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+  }
+
+  .classroom-header-controls .ctrl-btn.end-btn {
+    width: auto !important;
+    padding: 0 20px !important;
+    border-radius: 24px !important;
+  }
+
+  /* Hide minimize/maximize from mobile controls flow since it is handled by history popstate/clicking bubble */
+  #call-minimize-btn {
+    display: none !important;
+  }
+
+  /* 6. Video Feeds Full Screen underlay */
+  .classroom-body {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .video-feeds {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    z-index: 1 !important;
+    gap: 0 !important;
+  }
+
+  /* 7. Group call responsive grid (capped aspect-ratio, no vertical stretching) */
+  .video-feeds.group-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+    grid-auto-rows: min-content !important;
+    gap: 6px !important;
+    max-height: 100dvh !important;
+    padding: 70px 8px 120px 8px !important; /* spacing for top/bottom overlays */
+    align-content: start !important;
+    height: 100% !important;
+    width: 100% !important;
+    overflow-y: auto !important;
+  }
+
+  .video-feeds.group-grid .video-feed {
+    aspect-ratio: 16/9 !important;
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    max-width: none !important;
+    max-height: none !important;
+    flex: none !important;
+    border: 1.5px solid rgba(255,255,255,0.1) !important;
+  }
+
+  /* 8. 1:1 call layout (fullscreen remote, floating pip local) */
+  .video-feeds:not(.group-grid) .remote-feed {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+
+  .video-feeds:not(.group-grid) .local-feed,
+  .video-feeds:not(.group-grid) .draggable-pip {
+    position: absolute !important;
+    top: 75px !important;
+    right: 16px !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 90px !important;
+    height: 135px !important;
+    z-index: 50 !important;
+    border: 1.5px solid rgba(255,255,255,0.3) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+    resize: none !important;
   }
 }
 

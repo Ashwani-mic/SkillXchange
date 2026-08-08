@@ -18,6 +18,8 @@ let currentReviewSession = null;
 let isGroupCall = false;
 let groupRoomId = null;
 let activeCallPartnerId = null;
+let activeUploadFile = null;
+let activeUploadDataUrl = null;
 let groupPeerConnections = {}; // socketId -> RTCPeerConnection
 let groupParticipants = []; // array of { userId, socketId, userName, status }
 let classroomGroupMembers = []; // array of candidates that can be invited
@@ -362,7 +364,8 @@ function initSocketIO() {
       }
     } else {
       if (!msg.is_call_log) {
-        toast(`💬 ${msg.sender_name}: ${msg.message.slice(0, 60)}...`, 'info');
+        const preview = getMessagePreviewText(msg.message);
+        toast(`💬 ${msg.sender_name}: ${preview.slice(0, 50)}${preview.length > 50 ? '...' : ''}`, 'info');
       }
     }
 
@@ -591,9 +594,10 @@ function initSocketIO() {
     if (logEl && isGroupTabActive) {
       appendChatMessageToElement(logEl, msg.message, msg.sender_id === currentUser.id ? 'outgoing' : 'incoming', msg.sender_name);
     } else {
-      toast(`👥 [${msg.sender_name} in Group]: ${msg.message.slice(0, 50)}...`, 'info');
+      const preview = getMessagePreviewText(msg.message);
+      toast(`👥 [${msg.sender_name} in Group]: ${preview.slice(0, 50)}${preview.length > 50 ? '...' : ''}`, 'info');
       if (document.hidden) {
-        triggerNewMessageNotification(`Group message from ${msg.sender_name}`, msg.message);
+        triggerNewMessageNotification(`Group message from ${msg.sender_name}`, preview);
       }
     }
   });
@@ -1293,15 +1297,9 @@ async function loadChatHistory(peerId) {
 
 function appendChatMessage(text, direction) {
   const log = el('chat-messages-log');
-  const div = document.createElement('div');
-  div.className = `msg-bubble ${direction}`;
-  if (direction.includes('call-log')) {
-    div.innerHTML = text;
-  } else {
-    div.textContent = text;
+  if (log) {
+    appendChatMessageToElement(log, text, direction);
   }
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
 }
 
 // ==================================================
@@ -1462,11 +1460,12 @@ function initCallUI() {
     const overlay = el('call-overlay');
     overlay.classList.add('minimized');
     makeDraggable(overlay);
+    document.body.classList.remove('mobile-call-active');
     toast('Call minimized to bubble', 'info');
   });
 
   // Call Maximize (Restore full screen focus view)
-  el('call-maximize-btn')?.addEventListener('click', () => {
+  const restoreCallOverlay = () => {
     const overlay = el('call-overlay');
     overlay.classList.remove('minimized');
     overlay.style.top = '';
@@ -1475,7 +1474,20 @@ function initCallUI() {
     overlay.style.bottom = '';
     overlay.style.width = '';
     overlay.style.height = '';
+    if (window.innerWidth < 768) {
+      document.body.classList.add('mobile-call-active');
+      history.pushState({ view: 'call' }, '', '#call');
+    }
     toast('Call maximized', 'info');
+  };
+  el('call-maximize-btn')?.addEventListener('click', restoreCallOverlay);
+
+  // Click floating bubble to restore full screen call
+  el('call-overlay')?.addEventListener('click', () => {
+    const overlay = el('call-overlay');
+    if (overlay.classList.contains('minimized')) {
+      restoreCallOverlay();
+    }
   });
 
   // Workspace Toggle (split screen vs focus video mode)
@@ -1586,6 +1598,30 @@ async function openVideoCall(peerId, peerName, sessionId = null) {
   overlay.style.width = '';
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
+
+  if (window.innerWidth < 768) {
+    document.body.classList.add('mobile-call-active');
+    history.pushState({ view: 'call' }, '', '#call');
+  }
+
+  // Render peer avatar photo in call overlay remote mock
+  const remoteMock = el('remote-mock-stream');
+  if (remoteMock) {
+    const avatarUrl = activeChat.avatarUrl;
+    if (avatarUrl) {
+      remoteMock.innerHTML = `
+        <img src="${avatarUrl}" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary-light); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+        <p style="margin-top: 12px; font-weight: 600;">${peerName}</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">Waiting to connect...</p>
+      `;
+    } else {
+      remoteMock.innerHTML = `
+        <div class="feed-mock-icon"><i class="fa-solid fa-user-graduate"></i></div>
+        <p>${peerName}</p>
+        <p>Waiting to connect...</p>
+      `;
+    }
+  }
 
   el('classroom-video-feeds').classList.remove('group-grid');
   el('classroom-participants-drawer').classList.add('hidden');
@@ -1838,6 +1874,10 @@ function endCallLocal() {
   overlay.classList.add('hidden');
   overlay.classList.remove('minimized');
   overlay.classList.remove('show-workspace');
+  document.body.classList.remove('mobile-call-active');
+  if (window.location.hash === '#call') {
+    history.back();
+  }
   el('call-timer').textContent = '00:00';
   isGroupCall = false;
   groupRoomId = null;
@@ -1864,6 +1904,11 @@ async function startGroupCall(invitedUsers) {
   overlay.style.width = '';
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
+
+  if (window.innerWidth < 768) {
+    document.body.classList.add('mobile-call-active');
+    history.pushState({ view: 'call' }, '', '#call');
+  }
 
   el('classroom-participants-drawer').classList.remove('hidden');
   
@@ -1937,6 +1982,11 @@ async function joinGroupCall(roomId, initiatorName) {
   overlay.style.width = '';
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
+
+  if (window.innerWidth < 768) {
+    document.body.classList.add('mobile-call-active');
+    history.pushState({ view: 'call' }, '', '#call');
+  }
 
   el('classroom-participants-drawer').classList.remove('hidden');
   
@@ -2551,12 +2601,88 @@ function initChatsPage() {
     if (e.target === el('create-group-modal')) hide('create-group-modal');
   });
 
-  // Mobile back button — return to chats sidebar list
+  // Mobile back button - return to chats sidebar list
   el('chats-back-btn')?.addEventListener('click', () => {
     if (window.innerWidth < 768) {
       el('chats-window')?.classList.remove('mobile-active');
+      document.body.classList.remove('mobile-chat-active');
       currentActiveChatId = null;
     }
+  });
+
+  // Attach button triggers hidden file input
+  el('chats-attach-btn')?.addEventListener('click', () => {
+    el('chats-file-input')?.click();
+  });
+
+  // Selected file processing & preview overlay
+  el('chats-file-input')?.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast('File is too large! Maximum limit is 8MB.', 'error');
+      e.target.value = '';
+      return;
+    }
+    activeUploadFile = file;
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      activeUploadDataUrl = evt.target.result;
+      const previewBody = el('chats-preview-body');
+      previewBody.innerHTML = '';
+      if (file.type.startsWith('image/')) {
+        previewBody.innerHTML = `
+          <img src="${activeUploadDataUrl}" style="max-width: 100%; max-height: 250px; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+          <div style="margin-top: 12px; font-weight: 500; text-align: center; color: #fff;">${file.name}</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">${formatBytes(file.size)}</div>
+        `;
+      } else {
+        previewBody.innerHTML = `
+          <i class="fa-solid fa-file-lines" style="font-size: 4rem; color: var(--accent); margin-bottom: 12px;"></i>
+          <div style="font-weight: 500; text-align: center; color: #fff; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">${formatBytes(file.size)}</div>
+        `;
+      }
+      el('chats-preview-caption').value = '';
+      el('chats-file-preview-overlay').classList.remove('hidden');
+      el('chats-preview-caption').focus();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Discard preview actions
+  const discardPreview = () => {
+    el('chats-file-preview-overlay').classList.add('hidden');
+    el('chats-file-input').value = '';
+    activeUploadFile = null;
+    activeUploadDataUrl = null;
+  };
+  el('chats-preview-discard-btn')?.addEventListener('click', discardPreview);
+  el('chats-preview-cancel-btn')?.addEventListener('click', discardPreview);
+
+  // Send preview file attachment
+  el('chats-preview-send-btn')?.addEventListener('click', async () => {
+    if (!activeUploadFile || !activeUploadDataUrl) return;
+    const caption = el('chats-preview-caption').value.trim();
+    const payload = '[FILE_JSON]:' + JSON.stringify({
+      type: activeUploadFile.type.startsWith('image/') ? 'image' : 'file',
+      fileName: activeUploadFile.name,
+      fileSize: activeUploadFile.size,
+      fileType: activeUploadFile.type,
+      fileData: activeUploadDataUrl,
+      caption: caption
+    });
+    try {
+      await sendChatMessage(payload);
+      discardPreview();
+    } catch (err) {
+      toast('Failed to send file: ' + err.message, 'error');
+    }
+  });
+
+  // Image Viewer Overlay Close button
+  el('close-image-viewer-btn')?.addEventListener('click', () => {
+    el('image-viewer-overlay').classList.add('hidden');
   });
 
   el('create-group-form')?.addEventListener('submit', async e => {
@@ -2595,33 +2721,37 @@ function initChatsPage() {
     const message = input.value.trim();
     if (!message || !currentActiveChatId) return;
 
-    const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
-    const logEl = el('chats-messages-log');
-
     try {
-      if (isGroup) {
-        const groupId = currentActiveChatId.replace('group_', '');
-        if (socket && socket.connected) {
-          socket.emit('send_group_message', { group_id: groupId, message });
-          appendChatMessageToElement(logEl, message, 'outgoing');
-        } else {
-          await api('POST', `/api/groups/${groupId}/messages`, { message });
-          appendChatMessageToElement(logEl, message, 'outgoing');
-        }
-      } else {
-        if (socket && socket.connected) {
-          socket.emit('send_message', { receiver_id: currentActiveChatId, message, sender_name: currentUser.username });
-          appendChatMessageToElement(logEl, message, 'outgoing');
-        } else {
-          await api('POST', '/api/messages', { receiver_id: currentActiveChatId, message });
-          appendChatMessageToElement(logEl, message, 'outgoing');
-        }
-      }
+      await sendChatMessage(message);
       input.value = '';
     } catch (err) {
       toast('Failed to send message: ' + err.message, 'error');
     }
   });
+}
+
+async function sendChatMessage(message) {
+  const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
+  const logEl = el('chats-messages-log');
+
+  if (isGroup) {
+    const groupId = currentActiveChatId.replace('group_', '');
+    if (socket && socket.connected) {
+      socket.emit('send_group_message', { group_id: groupId, message });
+      appendChatMessageToElement(logEl, message, 'outgoing');
+    } else {
+      await api('POST', `/api/groups/${groupId}/messages`, { message });
+      appendChatMessageToElement(logEl, message, 'outgoing');
+    }
+  } else {
+    if (socket && socket.connected) {
+      socket.emit('send_message', { receiver_id: currentActiveChatId, message, sender_name: currentUser.username });
+      appendChatMessageToElement(logEl, message, 'outgoing');
+    } else {
+      await api('POST', '/api/messages', { receiver_id: currentActiveChatId, message });
+      appendChatMessageToElement(logEl, message, 'outgoing');
+    }
+  }
 }
 
 async function loadChatsPage() {
@@ -2746,12 +2876,16 @@ async function loadChatsPage() {
 
 async function selectChat(id, name, avatarUrl) {
   currentActiveChatId = id;
+  activeChat.avatarUrl = avatarUrl; // Cache for calling avatar representation
 
   // On mobile: slide in chat window
   if (window.innerWidth < 768) {
     el('chats-window')?.classList.add('mobile-active');
+    document.body.classList.add('mobile-chat-active');
+    history.pushState({ view: 'chat', chatId: id }, '', '#chat_' + id);
   } else {
     el('chats-window')?.classList.remove('mobile-active');
+    document.body.classList.remove('mobile-chat-active');
   }
   
   // Highlight active chat item
@@ -2789,7 +2923,7 @@ async function selectChat(id, name, avatarUrl) {
   if (isGroup) {
     statusEl.textContent = 'Group Chat';
     statusEl.className = 'online-dot online';
-    callBtn.innerHTML = '<i class="fa-solid fa-users"></i> Start Class';
+    callBtn.innerHTML = '<i class="fa-solid fa-users"></i> <span>Start Class</span>';
     callBtn.onclick = async () => {
       const groupId = id.replace('group_', '');
       try {
@@ -2896,7 +3030,7 @@ async function selectChat(id, name, avatarUrl) {
     const isOnline = onlineUserIdsSet.has(id);
     statusEl.textContent = isOnline ? 'online' : 'offline';
     statusEl.className = 'online-dot ' + (isOnline ? 'online' : 'offline');
-    callBtn.innerHTML = '<i class="fa-solid fa-video"></i> Start Class';
+    callBtn.innerHTML = '<i class="fa-solid fa-video"></i> <span>Start Class</span>';
     callBtn.onclick = () => {
       openVideoCall(id, name);
     };
@@ -2936,6 +3070,60 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
   
   if (direction.includes('call-log')) {
     div.innerHTML = text;
+  } else if (text.startsWith('[FILE_JSON]:')) {
+    try {
+      const fileInfo = JSON.parse(text.slice(12));
+      
+      // Render name header if incoming
+      if (senderName && direction === 'incoming') {
+        const nameSpan = document.createElement('span');
+        nameSpan.style.display = 'block';
+        nameSpan.style.fontSize = '0.75rem';
+        nameSpan.style.color = '#8b5cf6';
+        nameSpan.style.fontWeight = '700';
+        nameSpan.style.marginBottom = '4px';
+        nameSpan.textContent = senderName;
+        div.appendChild(nameSpan);
+      }
+
+      if (fileInfo.type === 'image') {
+        // Image message bubble
+        const img = document.createElement('img');
+        img.src = fileInfo.fileData;
+        img.style.cssText = 'max-width: 100%; max-height: 200px; border-radius: 8px; cursor: pointer; display: block; object-fit: cover;';
+        img.title = 'Click to view full screen';
+        img.addEventListener('click', () => {
+          el('viewer-img').src = fileInfo.fileData;
+          el('image-viewer-overlay').classList.remove('hidden');
+        });
+        div.appendChild(img);
+      } else {
+        // Document message bubble
+        const docCard = document.createElement('a');
+        docCard.href = fileInfo.fileData;
+        docCard.download = fileInfo.fileName;
+        docCard.style.cssText = 'display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px;';
+        docCard.innerHTML = `
+          <i class="fa-solid fa-file-arrow-down" style="font-size: 1.5rem; color: var(--accent); flex-shrink: 0;"></i>
+          <div style="min-width: 0; flex: 1;">
+            <div style="font-weight: 500; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff;">${fileInfo.fileName}</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">${formatBytes(fileInfo.fileSize)}</div>
+          </div>
+        `;
+        div.appendChild(docCard);
+      }
+
+      if (fileInfo.caption) {
+        const captionDiv = document.createElement('div');
+        captionDiv.style.cssText = 'margin-top: 6px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;';
+        captionDiv.textContent = fileInfo.caption;
+        div.appendChild(captionDiv);
+      }
+
+    } catch (e) {
+      console.error('Failed to parse file payload:', e);
+      div.textContent = '[Corrupted attachment]';
+    }
   } else {
     if (senderName && direction === 'incoming') {
       const nameSpan = document.createElement('span');
@@ -2948,11 +3136,31 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
       div.appendChild(nameSpan);
       div.appendChild(document.createTextNode(text));
     } else {
-      div.textContent = text;
+      div.appendChild(document.createTextNode(text));
     }
   }
   logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getMessagePreviewText(text) {
+  if (text.startsWith('[FILE_JSON]:')) {
+    try {
+      const fileInfo = JSON.parse(text.slice(12));
+      return fileInfo.type === 'image' ? '📷 Photo' : `📄 Document: ${fileInfo.fileName}`;
+    } catch {
+      return '📎 Attachment';
+    }
+  }
+  return text;
 }
 
 async function openCreateGroupModal() {
@@ -3027,6 +3235,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     show('landing-view');
     hide('app-view');
   }
+
+  // Window popstate event listener for Native back button/gesture
+  window.addEventListener('popstate', e => {
+    const callOverlay = el('call-overlay');
+    const isCallActive = callOverlay && !callOverlay.classList.contains('hidden');
+
+    if (isCallActive) {
+      if (!callOverlay.classList.contains('minimized')) {
+        callOverlay.classList.add('minimized');
+        makeDraggable(callOverlay);
+        document.body.classList.remove('mobile-call-active');
+        toast('Call minimized to bubble', 'info');
+      } else {
+        endCall();
+      }
+      return;
+    }
+
+    const chatsWindow = el('chats-window');
+    if (chatsWindow && chatsWindow.classList.contains('mobile-active')) {
+      chatsWindow.classList.remove('mobile-active');
+      document.body.classList.remove('mobile-chat-active');
+      currentActiveChatId = null;
+    }
+  });
 
   // Fade out and remove the app loading screen (mitigates Render free tier cold starts)
   const loadingScreen = el('app-loading-screen');
