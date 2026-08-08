@@ -61,7 +61,7 @@ body {
   font-family: var(--font-body);
   background: var(--bg-root);
   color: var(--text-primary);
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   line-height: 1.6;
 }
@@ -81,7 +81,7 @@ h1, h2, h3, h4, h5 {
 
 /* =================== UTILITIES =================== */
 .hidden { display: none !important; }
-.view-container { min-height: 100vh; }
+.view-container { min-height: 100dvh; }
 
 .glass-card {
   background: var(--bg-card);
@@ -523,7 +523,7 @@ select option, select optgroup {
 #app-view {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -1210,7 +1210,7 @@ select option, select optgroup {
   top: 60px;
   right: 0;
   width: 400px;
-  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
   background: rgba(8, 13, 24, 0.97);
   border-left: 1px solid var(--border-subtle);
   display: flex;
@@ -1360,8 +1360,10 @@ select option, select optgroup {
 .classroom-overlay {
   position: fixed;
   inset: 0;
+  height: 100dvh;
+  width: 100vw;
   background: #050810;
-  z-index: 200;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
 }
@@ -1844,7 +1846,7 @@ select option, select optgroup {
   .classroom-body {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 60px - 0px);
+    height: calc(100dvh - 58px);
     overflow: hidden;
   }
   .classroom-header {
@@ -2097,24 +2099,24 @@ select option, select optgroup {
   cursor: grabbing;
 }
 .video-feeds.group-grid {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  justify-content: center !important;
-  align-content: center !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
   gap: 12px !important;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  align-content: center;
 }
 .video-feeds.group-grid .video-feed {
-  flex: 1 1 200px !important;
-  aspect-ratio: 4/3 !important;
-  max-width: 45% !important;
-  max-height: 45vh !important;
+  aspect-ratio: 16/9 !important;
+  width: 100% !important;
   height: auto !important;
-}
-@media (max-width: 900px) {
-  .video-feeds.group-grid .video-feed {
-    flex: 1 1 140px !important;
-    max-width: 100% !important;
-  }
+  max-width: none !important;
+  max-height: none !important;
+  flex: none !important;
+  overflow: hidden;
+  border-radius: 12px;
 }
 
 .invite-peer-checkbox-item {
@@ -2271,9 +2273,9 @@ select option, select optgroup {
 /* ====== CHATS TAB STYLE ====== */
 .chats-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(280px, 30%) 1fr;
   gap: 16px;
-  height: calc(100vh - 60px - 110px);
+  height: calc(100dvh - 60px - 110px);
   min-height: 400px;
   margin-top: 16px;
 }
@@ -2492,20 +2494,42 @@ select option, select optgroup {
 }
 .chats-back-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .chats-layout {
     grid-template-columns: 1fr;
-    height: calc(100vh - 60px - 130px);
+    height: calc(100dvh - 60px - 130px);
     position: relative;
   }
 
-  /* On mobile: show sidebar OR chat window, not both */
-  .chats-sidebar.mobile-hidden { display: none !important; }
-  .chats-chat-window.mobile-hidden { display: none !important; }
-  .chats-chat-window.hidden-mobile { display: none; }
+  .chats-sidebar {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Chat window slides in from the right over the entire screen */
+  .chats-chat-window {
+    position: fixed;
+    top: 0;
+    left: 100%;
+    width: 100%;
+    height: 100dvh;
+    z-index: 1005;
+    background: #050810;
+    border: none;
+    border-radius: 0;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex !important;
+    flex-direction: column;
+  }
+
+  .chats-chat-window.mobile-active {
+    transform: translateX(-100%);
+  }
 
   /* Show back button on mobile */
-  .chats-back-btn { display: inline-flex; }
+  .chats-back-btn {
+    display: inline-flex;
+  }
 
   /* Members sidebar: slide over chat on mobile */
   .chats-members-sidebar {
@@ -2527,16 +2551,153 @@ select option, select optgroup {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ====== FOCUS MODE & WORKSPACE TOGGLING ====== */
+.classroom-overlay:not(.show-workspace) .classroom-body {
+  grid-template-columns: 1fr !important;
+}
+.classroom-overlay:not(.show-workspace) .workspace-panel {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
-  .chats-members-sidebar {
-    position: absolute;
-    right: 0;
-    top: 70px; /* aligns below the chat header row */
-    height: calc(100% - 70px);
-    z-index: 100;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.65);
-    background: #17161a !important; /* solid fallback match theme background color */
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+  .classroom-overlay:not(.show-workspace) .video-feeds {
+    flex: 1 1 100% !important;
+  }
+  .classroom-overlay:not(.show-workspace) .workspace-panel {
+    display: none !important;
+  }
+}
+
+/* ====== MINIMIZED PICTURE-IN-PICTURE CALL OVERLAY ====== */
+.classroom-overlay.minimized {
+  position: fixed !important;
+  bottom: 85px !important; /* sit above mobile bottom bar */
+  right: 20px !important;
+  top: auto !important;
+  left: auto !important;
+  width: 240px !important;
+  height: 155px !important;
+  border-radius: 16px !important;
+  border: 2px solid var(--primary-light) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6) !important;
+  z-index: 9999 !important;
+  overflow: hidden !important;
+  cursor: grab !important;
+  background: #000 !important;
+}
+.classroom-overlay.minimized:active {
+  cursor: grabbing !important;
+}
+
+.classroom-overlay.minimized .classroom-header {
+  position: absolute !important;
+  top: 6px !important;
+  right: 6px !important;
+  left: 6px !important;
+  height: auto !important;
+  background: transparent !important;
+  border-bottom: none !important;
+  padding: 0 !important;
+  z-index: 10000 !important;
+  justify-content: flex-end !important;
+  pointer-events: none !important;
+}
+
+.classroom-overlay.minimized .classroom-header-controls {
+  display: flex !important;
+  gap: 0 !important;
+  pointer-events: auto !important;
+}
+
+.classroom-overlay.minimized .classroom-header-controls button:not(#call-maximize-btn) {
+  display: none !important;
+}
+
+.classroom-overlay.minimized #call-maximize-btn {
+  display: flex !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: rgba(0,0,0,0.6) !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  color: #fff !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.85rem !important;
+}
+
+.classroom-overlay.minimized .classroom-brand,
+.classroom-overlay.minimized .classroom-timer-row {
+  display: none !important;
+}
+
+.classroom-overlay.minimized .classroom-body {
+  padding: 0 !important;
+  display: block !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.classroom-overlay.minimized .workspace-panel,
+.classroom-overlay.minimized .classroom-participants-drawer {
+  display: none !important;
+}
+
+.classroom-overlay.minimized .video-feeds {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+}
+
+.classroom-overlay.minimized .video-feeds.group-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+}
+
+.classroom-overlay.minimized .video-feeds:not(.group-grid) .local-feed {
+  display: none !important;
+}
+
+.classroom-overlay.minimized .video-feeds:not(.group-grid) .remote-feed {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  inset: 0 !important;
+  border-radius: 0 !important;
+}
+
+.classroom-overlay.minimized .video-feed {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* ====== MOBILE CONTROLS SAFE AREA & VIEWPORT ADAPTATIONS ====== */
+@media (max-width: 768px) {
+  .classroom-header {
+    height: auto !important;
+    flex-direction: column !important;
+    padding: 12px 16px !important;
+    gap: 8px !important;
+  }
+  .classroom-brand {
+    display: none !important;
+  }
+  .classroom-timer-row {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+  .classroom-header-controls {
+    width: 100% !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+  }
+  .classroom-header-controls .ctrl-btn {
+    flex: 0 0 auto !important;
   }
 }
 

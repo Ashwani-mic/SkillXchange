@@ -1456,6 +1456,36 @@ function initCallUI() {
   el('call-toggle-audio')?.addEventListener('click', () => toggleTrack('audio'));
   el('call-toggle-video')?.addEventListener('click', () => toggleTrack('video'));
   el('call-toggle-screen')?.addEventListener('click', shareScreen);
+
+  // Call Minimize (WhatsApp floating PIP)
+  el('call-minimize-btn')?.addEventListener('click', () => {
+    const overlay = el('call-overlay');
+    overlay.classList.add('minimized');
+    makeDraggable(overlay);
+    toast('Call minimized to bubble', 'info');
+  });
+
+  // Call Maximize (Restore full screen focus view)
+  el('call-maximize-btn')?.addEventListener('click', () => {
+    const overlay = el('call-overlay');
+    overlay.classList.remove('minimized');
+    overlay.style.top = '';
+    overlay.style.left = '';
+    overlay.style.right = '';
+    overlay.style.bottom = '';
+    overlay.style.width = '';
+    overlay.style.height = '';
+    toast('Call maximized', 'info');
+  });
+
+  // Workspace Toggle (split screen vs focus video mode)
+  el('call-toggle-workspace')?.addEventListener('click', () => {
+    const overlay = el('call-overlay');
+    const btn = el('call-toggle-workspace');
+    const active = overlay.classList.toggle('show-workspace');
+    btn.classList.toggle('active', active);
+    toast(active ? 'Workspace split active' : 'Workspace hidden (Focus mode)', 'info');
+  });
   
   el('show-participants-btn')?.addEventListener('click', () => {
     el('classroom-participants-drawer').classList.toggle('hidden');
@@ -1544,7 +1574,19 @@ async function openVideoCall(peerId, peerName, sessionId = null) {
   activeChat.partnerId = peerId;
   activeChat.partnerName = peerName;
   el('classroom-peer-name').textContent = peerName;
-  el('call-overlay').classList.remove('hidden');
+
+  const overlay = el('call-overlay');
+  overlay.classList.remove('hidden');
+  overlay.classList.remove('minimized');
+  overlay.classList.remove('show-workspace');
+  overlay.style.top = '';
+  overlay.style.left = '';
+  overlay.style.right = '';
+  overlay.style.bottom = '';
+  overlay.style.width = '';
+  overlay.style.height = '';
+  el('call-toggle-workspace')?.classList.remove('active');
+
   el('classroom-video-feeds').classList.remove('group-grid');
   el('classroom-participants-drawer').classList.add('hidden');
   
@@ -1792,7 +1834,10 @@ function endCallLocal() {
     </div>
   `;
   
-  el('call-overlay').classList.add('hidden');
+  const overlay = el('call-overlay');
+  overlay.classList.add('hidden');
+  overlay.classList.remove('minimized');
+  overlay.classList.remove('show-workspace');
   el('call-timer').textContent = '00:00';
   isGroupCall = false;
   groupRoomId = null;
@@ -1807,7 +1852,19 @@ async function startGroupCall(invitedUsers) {
   isGroupCall = true;
   groupRoomId = 'group_' + Date.now();
   el('classroom-peer-name').textContent = 'Group Class';
-  el('call-overlay').classList.remove('hidden');
+
+  const overlay = el('call-overlay');
+  overlay.classList.remove('hidden');
+  overlay.classList.remove('minimized');
+  overlay.classList.remove('show-workspace');
+  overlay.style.top = '';
+  overlay.style.left = '';
+  overlay.style.right = '';
+  overlay.style.bottom = '';
+  overlay.style.width = '';
+  overlay.style.height = '';
+  el('call-toggle-workspace')?.classList.remove('active');
+
   el('classroom-participants-drawer').classList.remove('hidden');
   
   // Show group-only add peer option
@@ -1868,7 +1925,19 @@ async function joinGroupCall(roomId, initiatorName) {
   isGroupCall = true;
   groupRoomId = roomId;
   el('classroom-peer-name').textContent = 'Group Class';
-  el('call-overlay').classList.remove('hidden');
+
+  const overlay = el('call-overlay');
+  overlay.classList.remove('hidden');
+  overlay.classList.remove('minimized');
+  overlay.classList.remove('show-workspace');
+  overlay.style.top = '';
+  overlay.style.left = '';
+  overlay.style.right = '';
+  overlay.style.bottom = '';
+  overlay.style.width = '';
+  overlay.style.height = '';
+  el('call-toggle-workspace')?.classList.remove('active');
+
   el('classroom-participants-drawer').classList.remove('hidden');
   
   // Show group-only add peer option
@@ -2484,9 +2553,8 @@ function initChatsPage() {
 
   // Mobile back button — return to chats sidebar list
   el('chats-back-btn')?.addEventListener('click', () => {
-    if (window.innerWidth <= 900) {
-      el('chats-list-container')?.closest('.chats-sidebar')?.classList.remove('mobile-hidden');
-      el('chats-window')?.classList.add('mobile-hidden');
+    if (window.innerWidth < 768) {
+      el('chats-window')?.classList.remove('mobile-active');
       currentActiveChatId = null;
     }
   });
@@ -2679,10 +2747,11 @@ async function loadChatsPage() {
 async function selectChat(id, name, avatarUrl) {
   currentActiveChatId = id;
 
-  // On mobile: hide sidebar, show only chat window
-  if (window.innerWidth <= 900) {
-    el('chats-list-container')?.closest('.chats-sidebar')?.classList.add('mobile-hidden');
-    el('chats-window')?.classList.remove('mobile-hidden');
+  // On mobile: slide in chat window
+  if (window.innerWidth < 768) {
+    el('chats-window')?.classList.add('mobile-active');
+  } else {
+    el('chats-window')?.classList.remove('mobile-active');
   }
   
   // Highlight active chat item
@@ -2977,6 +3046,7 @@ function makeDraggable(element) {
   element.addEventListener('touchstart', dragTouchStart, { passive: false });
 
   function dragMouseDown(e) {
+    if (element.id === 'call-overlay' && !element.classList.contains('minimized')) return;
     const rect = element.getBoundingClientRect();
     if (e.clientX > rect.right - 20 && e.clientY > rect.bottom - 20) return;
     
@@ -3007,6 +3077,7 @@ function makeDraggable(element) {
   }
 
   function dragTouchStart(e) {
+    if (element.id === 'call-overlay' && !element.classList.contains('minimized')) return;
     const rect = element.getBoundingClientRect();
     const touch = e.touches[0];
     // Don't drag if touching near the bottom right resize corner

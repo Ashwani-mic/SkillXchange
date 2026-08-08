@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SkillXchange — Teach What You Know. Learn What You Don't.</title>
   <meta name="description" content="SkillXchange is a professional peer-to-peer skill exchange platform. Teach what you know, learn what you don't — live video classes, real-time chat, and smart matching.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -706,6 +706,9 @@
         <button id="show-participants-btn" class="ctrl-btn" style="width: auto; padding: 0 10px; gap: 4px; font-size: 0.8rem;" title="Show Participants"><i class="fa-solid fa-users"></i> Peers (<span id="participants-count">1</span>)</button>
       </div>
       <div class="classroom-header-controls">
+        <button id="call-minimize-btn" class="ctrl-btn" title="Minimize Call" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);"><i class="fa-solid fa-down-left-and-up-right-to-center"></i></button>
+        <button id="call-maximize-btn" class="ctrl-btn hidden" title="Maximize/Restore Call" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);"><i class="fa-solid fa-expand"></i></button>
+        <button id="call-toggle-workspace" class="ctrl-btn" title="Toggle Workspace" style="width: auto; padding: 0 12px; gap: 6px;"><i class="fa-solid fa-laptop-code"></i> <span>Workspace</span></button>
         <button id="call-toggle-audio" class="ctrl-btn active" title="Mute/Unmute"><i class="fa-solid fa-microphone"></i></button>
         <button id="call-toggle-video" class="ctrl-btn active" title="Camera On/Off"><i class="fa-solid fa-video"></i></button>
         <button id="call-toggle-screen" class="ctrl-btn" title="Share Screen"><i class="fa-solid fa-desktop"></i></button>
