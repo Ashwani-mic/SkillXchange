@@ -789,6 +789,38 @@ app.delete('/api/groups/:id', requireAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/groups/:id/members/:userId — Remove a member from a group (admin/owner only)
+app.delete('/api/groups/:id/members/:userId', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  const targetUserId = parseInt(req.params.userId);
+  const myUserId = req.session.userId;
+  
+  if (targetUserId === myUserId) {
+    return res.status(400).json({ error: 'Cannot remove yourself.' });
+  }
+
+  try {
+    const group = await db.get('SELECT created_by FROM groups WHERE id = ?', [groupId]);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    const myMember = await db.get(
+      'SELECT role FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, myUserId]
+    );
+    const isOwner = group.created_by === myUserId;
+    const isAdmin = myMember && myMember.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Only admins or owners can remove members.' });
+    }
+
+    await db.run('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, targetUserId]);
+    res.json({ success: true, message: 'Member removed successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove member: ' + err.message });
+  }
+});
+
 // =====================================================
 //  SOCKET.IO — REAL-TIME EVENTS
 // =====================================================
@@ -1293,6 +1325,35 @@ io.on('connection', socket => {
     const participantsList = await rebuildParticipantsList(room);
     io.to(roomId).emit('group_participants_update', participantsList);
     console.log(`User ${authenticatedUserId} joined group room ${roomId} (socket: ${socket.id})`);
+  });
+
+  socket.on('kick_participant', async ({ roomId, userId }) => {
+    if (!authenticatedUserId) return;
+    const room = groupRooms.get(roomId);
+    if (room && room.hostId === authenticatedUserId) {
+      let targetSocketId = null;
+      for (const [sId, u] of room.connectedUsers.entries()) {
+        if (u.userId === userId) {
+          targetSocketId = sId;
+          break;
+        }
+      }
+      
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('kicked_from_class');
+        room.connectedUsers.delete(targetSocketId);
+        
+        const participantsList = await rebuildParticipantsList(room);
+        io.to(roomId).emit('group_participants_update', participantsList);
+        
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.leave(roomId);
+        }
+        io.to(roomId).emit('group_user_left', { socketId: targetSocketId, userId });
+        console.log(`Host ${authenticatedUserId} kicked User ${userId} from room ${roomId}`);
+      }
+    }
   });
 
   socket.on('group_signal', ({ toSocketId, signalData }) => {

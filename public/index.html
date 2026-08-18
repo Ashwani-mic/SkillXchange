@@ -544,9 +544,11 @@
 
               <!-- Group Members Panel -->
               <div class="chats-members-sidebar hidden" id="chats-members-sidebar" style="width: 240px; flex-shrink: 0; background: rgba(0,0,0,0.15); border-left: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; height: 100%;">
-                <div style="padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between;">
+                <div style="padding: 16px 16px 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between;">
                   <span><i class="fa-solid fa-users"></i> Members</span>
                 </div>
+                <!-- Add member button (visible to admin/owner) -->
+                <button id="chats-group-add-btn" class="btn btn-accent btn-sm hidden" style="margin: 8px 12px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><i class="fa-solid fa-user-plus"></i> Add Member</button>
                 <div id="chats-members-list" style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
                   <!-- Members list items -->
                 </div>
@@ -1006,6 +1008,31 @@
       <div class="modal-actions" style="margin-top: 20px;">
         <button type="button" class="btn btn-ghost" id="cancel-create-group-btn">Cancel</button>
         <button type="submit" class="btn btn-accent" id="submit-create-group-btn"><i class="fa-solid fa-plus"></i> Create Group</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- =================== ADD MEMBER MODAL =================== -->
+<div id="add-member-modal" class="modal-overlay hidden">
+  <div class="modal-card glass-card" style="max-width: 450px;">
+    <button class="modal-close-btn" id="close-add-member-btn"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-icon-header">
+      <div class="modal-icon-circle icon-purple"><i class="fa-solid fa-user-plus"></i></div>
+      <h2>Add Group Members</h2>
+      <p>Invite more matched contacts into this study group.</p>
+    </div>
+    <form id="add-member-form">
+      <div class="form-group" style="margin-top: 16px;">
+        <label style="margin-bottom: 8px; display: block; font-weight: 500;">Select Members</label>
+        <div id="add-member-peers-list" class="invite-peers-list" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2);">
+          <div class="skills-empty-hint">No contacts available to add.</div>
+        </div>
+      </div>
+      <div id="add-member-error" class="error-msg hidden"></div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button type="button" class="btn btn-ghost" id="cancel-add-member-btn">Cancel</button>
+        <button type="submit" class="btn btn-accent" id="submit-add-member-btn"><i class="fa-solid fa-plus"></i> Add Members</button>
       </div>
     </form>
   </div>

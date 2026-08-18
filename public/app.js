@@ -506,6 +506,11 @@ function initSocketIO() {
     }
   });
 
+  socket.on('kicked_from_class', () => {
+    toast('You have been removed from the classroom by the host.', 'error');
+    endCall();
+  });
+
   socket.on('user_online', userId => {
     userId = parseInt(userId);
     onlineUserIdsSet.add(userId);
@@ -2312,6 +2317,8 @@ function updateGroupParticipantsList() {
   const pending  = groupParticipants.filter(p => p.status === 'invited');
   const activeCount = hosts.length + active.length;
 
+  const isHost = groupParticipants.some(p => p.status === 'host' && p.userId === currentUser.id);
+
   const makeItem = (p, label, badgeClass) => {
     const avatarHtml = p.avatarUrl
       ? `<img src="${p.avatarUrl}" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
@@ -2319,13 +2326,44 @@ function updateGroupParticipantsList() {
 
     const li = document.createElement('li');
     li.className = 'participant-item';
+    li.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.02); margin-bottom: 4px;';
+    
+    let actionBtnHtml = '';
+    if (isHost && p.userId !== currentUser.id) {
+      if (p.status === 'connected') {
+        actionBtnHtml = `<button class="kick-peer-btn" title="Kick participant" style="background: transparent; border: none; color: #f43f5e; cursor: pointer; font-size: 0.8rem; padding: 2px 6px; display: inline-flex; align-items: center;"><i class="fa-solid fa-user-xmark"></i></button>`;
+      } else if (p.status === 'invited') {
+        actionBtnHtml = `<button class="reinvite-peer-btn" title="Re-invite participant" style="background: transparent; border: none; color: var(--accent); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; display: inline-flex; align-items: center;"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
+      }
+    }
+
     li.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
         ${avatarHtml}
-        <span class="participant-name">${p.userName}</span>
+        <span class="participant-name" style="font-size: 0.85rem; font-weight: 500; color: #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.userName}</span>
       </div>
-      <span class="participant-badge ${badgeClass}">${label}</span>
+      <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+        <span class="participant-badge ${badgeClass}" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">${label}</span>
+        ${actionBtnHtml}
+      </div>
     `;
+
+    const kickBtn = li.querySelector('.kick-peer-btn');
+    if (kickBtn) {
+      kickBtn.onclick = () => {
+        if (confirm(`Remove ${p.userName} from the call?`)) {
+          socket.emit('kick_participant', { roomId: groupRoomId, userId: p.userId });
+        }
+      };
+    }
+
+    const reinviteBtn = li.querySelector('.reinvite-peer-btn');
+    if (reinviteBtn) {
+      reinviteBtn.onclick = () => {
+        invitePeerToClassroom(p.userId, p.userName);
+      };
+    }
+
     return li;
   };
 
@@ -2360,9 +2398,9 @@ function updateGroupParticipantsList() {
     nonInvited.forEach(p => {
       const li = document.createElement('li');
       li.className = 'participant-item';
-      li.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 10px;';
+      li.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.01); margin-bottom: 4px;';
       li.innerHTML = `
-        <span class="participant-name" style="color: var(--text-muted);">${p.name}</span>
+        <span class="participant-name" style="color: var(--text-muted); font-size: 0.85rem;">${p.name}</span>
         <button class="invite-btn" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px; background: var(--primary); color: #fff; border: none; cursor: pointer; font-weight: 600;">Invite</button>
       `;
       li.querySelector('.invite-btn').onclick = () => {
@@ -2725,6 +2763,12 @@ function initChatsPage() {
   el('cancel-create-group-btn')?.addEventListener('click', () => hide('create-group-modal'));
   el('create-group-modal')?.addEventListener('click', e => {
     if (e.target === el('create-group-modal')) hide('create-group-modal');
+  });
+
+  el('close-add-member-btn')?.addEventListener('click', () => hide('add-member-modal'));
+  el('cancel-add-member-btn')?.addEventListener('click', () => hide('add-member-modal'));
+  el('add-member-modal')?.addEventListener('click', e => {
+    if (e.target === el('add-member-modal')) hide('add-member-modal');
   });
 
   // Mobile back button - return to chats sidebar list
@@ -3232,6 +3276,18 @@ async function selectChat(id, name, avatarUrl) {
           isAdmin = true;
         }
 
+        const addMemberBtn = el('chats-group-add-btn');
+        if (addMemberBtn) {
+          if (isOwner || isAdmin) {
+            addMemberBtn.classList.remove('hidden');
+            addMemberBtn.onclick = () => {
+              openAddMemberModal(groupId, groupData.members);
+            };
+          } else {
+            addMemberBtn.classList.add('hidden');
+          }
+        }
+
         groupData.members.forEach(member => {
           const isMe = member.id === currentUser.id;
           const isOnline = onlineUserIdsSet.has(member.id);
@@ -3240,23 +3296,53 @@ async function selectChat(id, name, avatarUrl) {
             : `<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 0.8rem;"><i class="fa-solid fa-user"></i></div>`;
           
           const memberItem = document.createElement('div');
-          memberItem.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);';
+          memberItem.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); justify-content: space-between;';
           const dotColor  = isOnline ? '#10b981' : '#475569';
           const dotShadow = isOnline ? 'box-shadow: 0 0 5px #10b981;' : '';
+          
+          let removeBtnHtml = '';
+          if ((isOwner || isAdmin) && !isMe) {
+            removeBtnHtml = `
+              <button class="btn-remove-member" title="Remove member" style="background: transparent; border: none; color: #f43f5e; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.82rem; transition: transform 0.15s ease;">
+                <i class="fa-solid fa-user-minus"></i>
+              </button>
+            `;
+          }
+
           memberItem.innerHTML = `
-            <div style="position: relative; flex-shrink: 0;">
-              ${avatarHtml}
-              <div class="member-online-dot" data-user-id="${member.id}" style="position: absolute; bottom: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%; background: ${dotColor}; border: 2px solid #0a0e1a; ${dotShadow}"></div>
-            </div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 0.88rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f1f5f9;">
-                ${member.fullname || member.name}${isMe ? ' <span style="color:#8b5cf6; font-size:0.78rem;">(You)</span>' : ''}
+            <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+              <div style="position: relative; flex-shrink: 0;">
+                ${avatarHtml}
+                <div class="member-online-dot" data-user-id="${member.id}" style="position: absolute; bottom: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%; background: ${dotColor}; border: 2px solid #0a0e1a; ${dotShadow}"></div>
               </div>
-              <div style="font-size: 0.75rem; color: #64748b; text-transform: capitalize; margin-top: 2px;">
-                ${member.role || 'member'}
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 0.88rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f1f5f9;">
+                  ${member.fullname || member.name}${isMe ? ' <span style="color:#8b5cf6; font-size:0.78rem;">(You)</span>' : ''}
+                </div>
+                <div style="font-size: 0.75rem; color: #64748b; text-transform: capitalize; margin-top: 2px;">
+                  ${member.role || 'member'}
+                </div>
               </div>
             </div>
+            ${removeBtnHtml}
           `;
+
+          const removeBtn = memberItem.querySelector('.btn-remove-member');
+          if (removeBtn) {
+            removeBtn.onclick = async e => {
+              e.stopPropagation();
+              if (confirm(`Remove ${member.fullname || member.name} from the group?`)) {
+                try {
+                  await api('DELETE', `/api/groups/${groupId}/members/${member.id}`);
+                  toast('Member removed successfully.', 'success');
+                  selectChat(id, name, avatarUrl);
+                } catch (err) {
+                  toast('Failed to remove member: ' + err.message, 'error');
+                }
+              }
+            };
+          }
+
           membersListEl.appendChild(memberItem);
         });
       }
@@ -3991,3 +4077,64 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
+
+async function openAddMemberModal(groupId, existingMembers) {
+  const modal = el('add-member-modal');
+  const listEl = el('add-member-peers-list');
+  const errorEl = el('add-member-error');
+
+  if (!modal || !listEl) return;
+
+  hide(errorEl);
+  listEl.innerHTML = '<div class="skills-empty-hint"><i class="fa-solid fa-spinner fa-spin"></i> Loading matches...</div>';
+  show('add-member-modal');
+
+  try {
+    const matchesData = await api('GET', '/api/matches').catch(() => ({ matches: [] }));
+    const matches = matchesData.matches || [];
+
+    const existingIds = new Set(existingMembers.map(m => m.id));
+    const candidates = matches.filter(peer => !existingIds.has(peer.id));
+
+    if (candidates.length === 0) {
+      listEl.innerHTML = '<div class="skills-empty-hint">No matches available. All matches are already in this group.</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    candidates.forEach(peer => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display: flex; align-items: center; gap: 10px; color: #fff; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);';
+      div.innerHTML = `
+        <input type="checkbox" id="add-peer-chk-${peer.id}" value="${peer.id}" class="add-peer-checkbox" style="width: 16px; height: 16px; accent-color: var(--accent);">
+        <label for="add-peer-chk-${peer.id}" style="cursor: pointer; display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.88rem; color: #f1f5f9;">
+          <span>${peer.fullname || peer.username}</span>
+        </label>
+      `;
+      listEl.appendChild(div);
+    });
+
+    const form = el('add-member-form');
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const selectedIds = Array.from(document.querySelectorAll('.add-peer-checkbox:checked')).map(cb => cb.value);
+      if (selectedIds.length === 0) {
+        errorEl.textContent = 'Please select at least one member to add.';
+        show(errorEl);
+        return;
+      }
+
+      try {
+        await api('POST', `/api/groups/${groupId}/members`, { memberIds: selectedIds });
+        toast('Members added successfully.', 'success');
+        hide('add-member-modal');
+        selectChat(currentActiveChatId, el('chats-header-name').textContent, activeChat.avatarUrl);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        show(errorEl);
+      }
+    };
+  } catch (err) {
+    listEl.innerHTML = `<div class="error-msg">Failed to load matches: ${err.message}</div>`;
+  }
+}
