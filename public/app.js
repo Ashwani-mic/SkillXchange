@@ -3583,7 +3583,7 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
 
   const textEl = document.createElement('span');
   textEl.className = 'msg-text-content';
-  
+
   if (direction.includes('call-log')) {
     textEl.innerHTML = text;
     div.appendChild(textEl);
@@ -3632,9 +3632,18 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
         `;
         textEl.appendChild(docCard);
       }
+
+      if (fileInfo.caption) {
+        const captionDiv = document.createElement('div');
+        captionDiv.style.cssText = 'margin-top: 6px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;';
+        captionDiv.textContent = fileInfo.caption;
+        textEl.appendChild(captionDiv);
+      }
+      div.appendChild(textEl);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to parse file payload:', e);
       textEl.textContent = '[Corrupted attachment]';
+      div.appendChild(textEl);
     }
   } else if (text.startsWith('[LOCATION_JSON]:')) {
     try {
@@ -3661,8 +3670,10 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
         </div>
       `;
       textEl.appendChild(locCard);
+      div.appendChild(textEl);
     } catch (e) {
       textEl.textContent = '[Location Error]';
+      div.appendChild(textEl);
     }
   } else if (text.startsWith('[CONTACT_JSON]:')) {
     try {
@@ -3691,20 +3702,9 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
         openPeerProfile(contact.peerId);
       };
       textEl.appendChild(card);
-    } catch (e) {
-      textEl.textContent = '[Contact Card Error]';
-    }
-
-      if (fileInfo.caption) {
-        const captionDiv = document.createElement('div');
-        captionDiv.style.cssText = 'margin-top: 6px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;';
-        captionDiv.textContent = fileInfo.caption;
-        textEl.appendChild(captionDiv);
-      }
       div.appendChild(textEl);
     } catch (e) {
-      console.error('Failed to parse file payload:', e);
-      textEl.textContent = '[Corrupted attachment]';
+      textEl.textContent = '[Contact Card Error]';
       div.appendChild(textEl);
     }
   } else {
