@@ -3535,7 +3535,7 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
         const audio = document.createElement('audio');
         audio.src = fileInfo.fileData;
         audio.controls = true;
-        audio.style.cssText = 'max-width: 100%; display: block; outline: none; margin-top: 4px;';
+        audio.style.cssText = 'max-width: 250px; height: 36px; border-radius: 18px; display: block; outline: none; margin-top: 4px;';
         textEl.appendChild(audio);
       } else {
         const docCard = document.createElement('a');
