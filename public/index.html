@@ -547,8 +547,11 @@
                 <div style="padding: 16px 16px 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between;">
                   <span><i class="fa-solid fa-users"></i> Members</span>
                 </div>
-                <!-- Add member button (visible to admin/owner) -->
-                <button id="chats-group-add-btn" class="btn btn-accent btn-sm hidden" style="margin: 8px 12px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><i class="fa-solid fa-user-plus"></i> Add Member</button>
+                <!-- Add member / Copy Invite Link buttons (visible to admin/owner) -->
+                <div style="display: flex; gap: 8px; margin: 8px 12px;">
+                  <button id="chats-group-add-btn" class="btn btn-accent btn-sm hidden" style="flex: 1; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><i class="fa-solid fa-user-plus"></i> Add Member</button>
+                  <button id="chats-group-invite-btn" class="btn btn-primary btn-sm hidden" style="font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 6px;" title="Copy Group Invite Link"><i class="fa-solid fa-link"></i> Link</button>
+                </div>
                 <div id="chats-members-list" style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
                   <!-- Members list items -->
                 </div>
@@ -664,6 +667,10 @@
                 <div class="form-group">
                   <label>Avatar URL (Optional)</label>
                   <input type="text" id="profile-avatar" placeholder="https://your-photo-url.jpg">
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; margin-bottom: 16px;">
+                  <input type="checkbox" id="profile-hide-last-seen" style="width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;">
+                  <label for="profile-hide-last-seen" style="margin-bottom: 0; cursor: pointer; user-select: none;">Hide Online / Last Seen status</label>
                 </div>
                 <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>
                 <div id="profile-success" class="success-msg hidden"><i class="fa-solid fa-circle-check"></i> Profile updated!</div>

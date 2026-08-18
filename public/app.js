@@ -28,6 +28,7 @@ let isTyping = false;
 let audioContext = null;
 let audioAnalysers = {}; // socketId -> AnalyserNode
 let screenShareTrack = null;
+let networkStatsInterval = null;
 let groupPeerConnections = {}; // socketId -> RTCPeerConnection
 let groupParticipants = []; // array of { userId, socketId, userName, status }
 let classroomGroupMembers = []; // array of candidates that can be invited
@@ -509,6 +510,21 @@ function initSocketIO() {
   socket.on('kicked_from_class', () => {
     toast('You have been removed from the classroom by the host.', 'error');
     endCall();
+  });
+
+  socket.on('force_mute_mic', () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack && audioTrack.enabled) {
+        audioTrack.enabled = false;
+        const muteBtn = el('call-toggle-audio');
+        if (muteBtn) {
+          muteBtn.classList.add('muted');
+          muteBtn.innerHTML = '<i class="fa-solid fa-microphone-slash"></i>';
+        }
+        toast('You have been muted by the host.', 'warning');
+      }
+    }
   });
 
   socket.on('user_online', userId => {
@@ -1300,6 +1316,11 @@ async function loadProfile() {
     el('profile-credits').textContent = u.credits || 0;
     el('credits-count').textContent = u.credits || 0;
 
+    const hideLastSeenChk = el('profile-hide-last-seen');
+    if (hideLastSeenChk) {
+      hideLastSeenChk.checked = u.hide_last_seen === 1;
+    }
+
     const rating = parseFloat(u.average_rating || 0);
     el('profile-avg-rating').textContent = rating.toFixed(1);
     el('dropdown-rating').textContent = rating.toFixed(1);
@@ -1322,7 +1343,8 @@ function initProfilePage() {
       const data = await api('PUT', '/api/users/me', {
         fullname: el('profile-fullname').value.trim(),
         bio: el('profile-bio').value.trim(),
-        avatar_url: el('profile-avatar').value.trim()
+        avatar_url: el('profile-avatar').value.trim(),
+        hide_last_seen: el('profile-hide-last-seen') ? el('profile-hide-last-seen').checked : false
       });
       currentUser = { ...currentUser, ...data.user };
       updateHeaderUser();
@@ -1931,6 +1953,68 @@ function startCallTimer() {
     if (el('call-timer')) el('call-timer').textContent = `${m}:${s}`;
   }, 1000);
 
+  // Poll connection quality stats
+  clearInterval(networkStatsInterval);
+  networkStatsInterval = setInterval(async () => {
+    if (isGroupCall && Object.keys(groupPeerConnections).length > 0) {
+      for (const [peerSocketId, pc] of Object.entries(groupPeerConnections)) {
+        if (pc.connectionState !== 'connected') continue;
+        try {
+          const stats = await pc.getStats();
+          let rtt = 80;
+          stats.forEach(report => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              rtt = (report.currentRoundTripTime || 0.08) * 1000;
+            }
+          });
+          const qEl = el(`quality_${peerSocketId}`);
+          if (qEl) {
+            if (rtt < 100) {
+              qEl.innerHTML = '<i class="fa-solid fa-signal" style="color: #10b981;"></i>';
+              qEl.title = `Excellent RTT: ${Math.round(rtt)}ms`;
+            } else if (rtt < 250) {
+              qEl.innerHTML = '<i class="fa-solid fa-signal" style="color: #eab308;"></i>';
+              qEl.title = `Fair RTT: ${Math.round(rtt)}ms`;
+            } else {
+              qEl.innerHTML = '<i class="fa-solid fa-signal" style="color: #f43f5e;"></i>';
+              qEl.title = `Poor RTT: ${Math.round(rtt)}ms`;
+            }
+          }
+        } catch {}
+      }
+    } else if (!isGroupCall && peerConnection && peerConnection.connectionState === 'connected') {
+      try {
+        const stats = await peerConnection.getStats();
+        let rtt = 80;
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            rtt = (report.currentRoundTripTime || 0.08) * 1000;
+          }
+        });
+        const qEl = el('call-quality-indicator') || el('classroom-peer-name');
+        if (qEl) {
+          let signalColor = '#10b981';
+          let labelText = 'Good Connection';
+          if (rtt >= 250) {
+            signalColor = '#f43f5e';
+            labelText = 'Poor Connection';
+          } else if (rtt >= 100) {
+            signalColor = '#eab308';
+            labelText = 'Fair Connection';
+          }
+          let statusIndicator = el('11-call-quality');
+          if (!statusIndicator) {
+            statusIndicator = document.createElement('span');
+            statusIndicator.id = '11-call-quality';
+            statusIndicator.style.marginLeft = '8px';
+            qEl.appendChild(statusIndicator);
+          }
+          statusIndicator.innerHTML = `<i class="fa-solid fa-signal" style="color: ${signalColor}; font-size: 0.8rem;" title="${labelText}: ${Math.round(rtt)}ms"></i>`;
+        }
+      } catch {}
+    }
+  }, 3000);
+
   setTimeout(() => {
     const localFeed = document.querySelector('.local-feed');
     if (localFeed) {
@@ -1964,6 +2048,7 @@ async function endCall() {
 
 function endCallLocal() {
   clearInterval(callTimer);
+  clearInterval(networkStatsInterval);
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (peerConnection) { peerConnection.close(); peerConnection = null; }
   
@@ -2174,7 +2259,11 @@ function createPeerFeedContainer(peerSocketId, peerUserName) {
         <div class="feed-mock-icon"><i class="fa-solid fa-user-graduate"></i></div>
         <p>Connecting...</p>
       </div>
-      <div class="feed-label" id="label_${peerSocketId}"><i class="fa-solid fa-circle live-dot"></i> ${peerUserName}</div>
+      <div class="feed-label" id="label_${peerSocketId}" style="display: flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-circle live-dot"></i> 
+        <span>${peerUserName}</span>
+        <span class="quality-indicator" id="quality_${peerSocketId}" style="margin-left: 6px; display: inline-flex;" title="Network Quality: Good"><i class="fa-solid fa-signal" style="color: #10b981;"></i></span>
+      </div>
     `;
     videoGrid.appendChild(peerFeed);
   }
@@ -2371,8 +2460,26 @@ function updateGroupParticipantsList() {
   if (hosts.length || active.length) {
     const secLabel = document.createElement('div');
     secLabel.className = 'participants-section-label';
-    secLabel.innerHTML = '<i class="fa-solid fa-signal"></i> In the Call';
+    secLabel.style.display = 'flex';
+    secLabel.style.alignItems = 'center';
+    secLabel.style.width = '100%';
+    
+    let muteAllBtnHtml = '';
+    if (isHost) {
+      muteAllBtnHtml = `<button class="mute-all-btn" style="margin-left: auto; background: transparent; border: 1px dashed rgba(239,68,68,0.4); color: #f43f5e; font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-family: inherit;"><i class="fa-solid fa-microphone-slash"></i> Mute All</button>`;
+    }
+    secLabel.innerHTML = `<span style="display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-signal"></i> In the Call</span> ${muteAllBtnHtml}`;
     list.appendChild(secLabel);
+
+    const muteAllBtn = secLabel.querySelector('.mute-all-btn');
+    if (muteAllBtn) {
+      muteAllBtn.onclick = () => {
+        if (confirm('Mute all participants?')) {
+          socket.emit('mute_all_participants', { roomId: groupRoomId });
+        }
+      };
+    }
+
     hosts.forEach(p => list.appendChild(makeItem(p, 'Host', 'host')));
     active.forEach(p => list.appendChild(makeItem(p, 'Joined', 'connected')));
   }
@@ -2780,9 +2887,11 @@ function initChatsPage() {
     }
   });
 
-  // Attach button triggers hidden file input
-  el('chats-attach-btn')?.addEventListener('click', () => {
-    el('chats-file-input')?.click();
+  // Attach button triggers customized overlay popup menu (WhatsApp style)
+  el('chats-attach-btn')?.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    showAttachMenu(el('chats-attach-btn'));
   });
 
   // Selected file processing & preview overlay
@@ -3277,14 +3386,33 @@ async function selectChat(id, name, avatarUrl) {
         }
 
         const addMemberBtn = el('chats-group-add-btn');
+        const inviteLinkBtn = el('chats-group-invite-btn');
+        const showButtons = isOwner || isAdmin;
+
         if (addMemberBtn) {
-          if (isOwner || isAdmin) {
+          if (showButtons) {
             addMemberBtn.classList.remove('hidden');
             addMemberBtn.onclick = () => {
               openAddMemberModal(groupId, groupData.members);
             };
           } else {
             addMemberBtn.classList.add('hidden');
+          }
+        }
+
+        if (inviteLinkBtn) {
+          if (showButtons) {
+            inviteLinkBtn.classList.remove('hidden');
+            inviteLinkBtn.onclick = () => {
+              const inviteUrl = `${window.location.origin}/#join-group_${groupId}`;
+              navigator.clipboard.writeText(inviteUrl).then(() => {
+                toast('Group invite link copied to clipboard!', 'success');
+              }).catch(() => {
+                toast('Failed to copy link. Here it is: ' + inviteUrl, 'warning');
+              });
+            };
+          } else {
+            inviteLinkBtn.classList.add('hidden');
           }
         }
 
@@ -3399,7 +3527,7 @@ async function selectChat(id, name, avatarUrl) {
       const data = await api('GET', `/api/groups/${groupId}/messages`);
       logEl.innerHTML = '';
       data.messages.forEach(m => {
-        appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', m.sender_name, m.id, 'sent', m.reply_to_id, m.reactions, m.is_edited, m.is_deleted);
+        appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', m.sender_name, m.id, 'sent', m.reply_to_id, m.reactions, m.is_edited, m.is_deleted, m.read_by);
       });
       // Mark group messages as read
       if (socket && socket.connected) {
@@ -3426,10 +3554,11 @@ async function selectChat(id, name, avatarUrl) {
   }
 }
 
-function appendChatMessageToElement(logEl, text, direction, senderName = null, id = null, status = 'sent', replyToId = null, reactions = '[]', isEdited = 0, isDeleted = 0) {
+function appendChatMessageToElement(logEl, text, direction, senderName = null, id = null, status = 'sent', replyToId = null, reactions = '[]', isEdited = 0, isDeleted = 0, readBy = null) {
   const div = document.createElement('div');
   div.className = `msg-bubble ${direction}`;
   if (id) div.setAttribute('data-msg-id', id);
+  if (readBy) div.setAttribute('data-read-by', readBy);
 
   // Render reply quote box if this message is a reply to another message
   if (replyToId) {
@@ -3483,6 +3612,12 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
           el('image-viewer-overlay').classList.remove('hidden');
         });
         textEl.appendChild(img);
+      } else if (fileInfo.type === 'audio' || fileInfo.fileName?.endsWith('.webm')) {
+        const audio = document.createElement('audio');
+        audio.src = fileInfo.fileData;
+        audio.controls = true;
+        audio.style.cssText = 'max-width: 100%; display: block; outline: none; margin-top: 4px;';
+        textEl.appendChild(audio);
       } else {
         const docCard = document.createElement('a');
         docCard.href = fileInfo.fileData;
@@ -3497,6 +3632,68 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
         `;
         textEl.appendChild(docCard);
       }
+    } catch (e) {
+      console.error(e);
+      textEl.textContent = '[Corrupted attachment]';
+    }
+  } else if (text.startsWith('[LOCATION_JSON]:')) {
+    try {
+      const locInfo = JSON.parse(text.slice(16));
+      if (senderName && direction === 'incoming') {
+        const nameSpan = document.createElement('span');
+        nameSpan.style.display = 'block';
+        nameSpan.style.fontSize = '0.75rem';
+        nameSpan.style.color = '#8b5cf6';
+        nameSpan.style.fontWeight = '700';
+        nameSpan.style.marginBottom = '4px';
+        nameSpan.textContent = senderName;
+        textEl.appendChild(nameSpan);
+      }
+      const locCard = document.createElement('a');
+      locCard.href = locInfo.mapsUrl;
+      locCard.target = '_blank';
+      locCard.style.cssText = 'display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px;';
+      locCard.innerHTML = `
+        <i class="fa-solid fa-map-location-dot" style="font-size: 1.6rem; color: #10b981; flex-shrink: 0;"></i>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-weight: 600; font-size: 0.85rem; color: #fff;">Shared Location</div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); text-decoration: underline;">Click to view map</div>
+        </div>
+      `;
+      textEl.appendChild(locCard);
+    } catch (e) {
+      textEl.textContent = '[Location Error]';
+    }
+  } else if (text.startsWith('[CONTACT_JSON]:')) {
+    try {
+      const contact = JSON.parse(text.slice(15));
+      if (senderName && direction === 'incoming') {
+        const nameSpan = document.createElement('span');
+        nameSpan.style.display = 'block';
+        nameSpan.style.fontSize = '0.75rem';
+        nameSpan.style.color = '#8b5cf6';
+        nameSpan.style.fontWeight = '700';
+        nameSpan.style.marginBottom = '4px';
+        nameSpan.textContent = senderName;
+        textEl.appendChild(nameSpan);
+      }
+      const card = document.createElement('div');
+      card.style.cssText = 'display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); width: 220px;';
+      card.innerHTML = `
+        <i class="fa-solid fa-address-card" style="font-size: 1.6rem; color: #eab308; flex-shrink: 0;"></i>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-weight: 600; font-size: 0.85rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contact.peerName}</div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;">${contact.peerBio}</div>
+          <button class="view-contact-btn" style="background: var(--primary); color: #fff; border: none; padding: 4px 8px; font-size: 0.68rem; border-radius: 4px; cursor: pointer; margin-top: 6px; font-weight: 600; font-family: inherit;">View Profile</button>
+        </div>
+      `;
+      card.querySelector('.view-contact-btn').onclick = () => {
+        openPeerProfile(contact.peerId);
+      };
+      textEl.appendChild(card);
+    } catch (e) {
+      textEl.textContent = '[Contact Card Error]';
+    }
 
       if (fileInfo.caption) {
         const captionDiv = document.createElement('div');
@@ -3637,6 +3834,14 @@ function showMsgActionsMenu(bubble, id, text, direction) {
       }
     };
     menu.appendChild(deleteBtn);
+  }
+
+  const readBy = bubble.getAttribute('data-read-by');
+  if (readBy) {
+    const seenInfo = document.createElement('div');
+    seenInfo.style.cssText = 'border-top: 1px solid rgba(255,255,255,0.08); padding: 6px 12px 2px; font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; font-style: italic;';
+    seenInfo.innerHTML = `<i class="fa-solid fa-eye" style="margin-right: 4px;"></i> Seen by: ${readBy}`;
+    menu.appendChild(seenInfo);
   }
 
   bubble.parentElement.appendChild(menu);
@@ -3893,6 +4098,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadingScreen.style.opacity = '0';
     setTimeout(() => loadingScreen.remove(), 500);
   }
+
+  // Handle invite links routing
+  const handleHashRouting = async () => {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#join-group_')) {
+      const groupId = hash.replace('#join-group_', '');
+      try {
+        await api('POST', `/api/groups/${groupId}/join`);
+        toast('Joined group via invite link!', 'success');
+        window.location.hash = '';
+        loadChatPanel();
+        selectChat(`group_${groupId}`, 'Group Chat', '');
+      } catch (err) {
+        toast('Failed to join group via link: ' + err.message, 'error');
+        window.location.hash = '';
+      }
+    }
+  };
+  window.addEventListener('hashchange', handleHashRouting);
+  setTimeout(handleHashRouting, 1200);
 });
 
 // Utility: Make Element Draggable
@@ -4136,5 +4361,176 @@ async function openAddMemberModal(groupId, existingMembers) {
     };
   } catch (err) {
     listEl.innerHTML = `<div class="error-msg">Failed to load matches: ${err.message}</div>`;
+  }
+}
+
+// Customized popup attach options menu
+function showAttachMenu(btn) {
+  document.querySelectorAll('.chats-attach-menu').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'chats-attach-menu';
+  menu.style.cssText = 'position: absolute; bottom: 65px; left: 16px; background: #0f1322; border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 1008; font-size: 0.82rem; width: 160px;';
+
+  const makeOption = (icon, label, color, action) => {
+    const opt = document.createElement('button');
+    opt.type = 'button';
+    opt.style.cssText = 'background: transparent; border: none; color: #fff; padding: 8px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; font-family: inherit; border-radius: 6px;';
+    opt.onmouseenter = () => opt.style.background = 'rgba(255,255,255,0.05)';
+    opt.onmouseleave = () => opt.style.background = 'transparent';
+    opt.innerHTML = `<i class="fa-solid ${icon}" style="color: ${color}; width: 16px; text-align: center;"></i> ${label}`;
+    opt.onclick = () => {
+      menu.remove();
+      action();
+    };
+    return opt;
+  };
+
+  menu.appendChild(makeOption('fa-file-arrow-up', 'Document / Photo', '#3b82f6', () => {
+    el('chats-file-input').click();
+  }));
+
+  menu.appendChild(makeOption('fa-microphone', 'Voice Note', '#ef4444', () => {
+    startVoiceNoteRecording();
+  }));
+
+  menu.appendChild(makeOption('fa-location-dot', 'Share Location', '#10b981', () => {
+    shareCurrentLocation();
+  }));
+
+  menu.appendChild(makeOption('fa-address-card', 'Share Contact', '#eab308', () => {
+    shareContactCard();
+  }));
+
+  btn.parentElement.appendChild(menu);
+
+  const closeHandler = () => {
+    menu.remove();
+    document.removeEventListener('click', closeHandler);
+  };
+  setTimeout(() => document.addEventListener('click', closeHandler), 100);
+}
+
+// Media Recorder voice note capture
+function startVoiceNoteRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Voice notes are not supported by this browser.', 'warning');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    const mediaRecorder = new MediaRecorder(stream);
+    const audioChunks = [];
+
+    mediaRecorder.ondataavailable = e => {
+      audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = () => {
+        const base64Audio = reader.result;
+        const payload = JSON.stringify({
+          type: 'audio',
+          fileName: `Voice Note - ${new Date().toLocaleTimeString()}.webm`,
+          fileSize: audioBlob.size,
+          fileData: base64Audio
+        });
+        sendChatMessage(`[FILE_JSON]:${payload}`);
+      };
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+    el('chats-input-form').innerHTML = `
+      <div style="flex: 1; display: flex; align-items: center; gap: 12px; color: #ef4444; font-weight: 500; font-size: 0.85rem;">
+        <i class="fa-solid fa-microphone fa-pulse"></i> Recording... <span id="record-timer">0:00</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-record" style="color: var(--text-muted);">Cancel</button>
+      <button type="button" class="btn btn-danger btn-sm" id="btn-stop-record" style="border-radius: 20px;"><i class="fa-solid fa-square"></i> Send</button>
+    `;
+
+    let sec = 0;
+    const recordInterval = setInterval(() => {
+      sec++;
+      const min = Math.floor(sec / 60);
+      const displaySec = (sec % 60).toString().padStart(2, '0');
+      const timerEl = el('record-timer');
+      if (timerEl) timerEl.textContent = `${min}:${displaySec}`;
+    }, 1000);
+
+    mediaRecorder.start();
+
+    el('btn-stop-record').onclick = () => {
+      clearInterval(recordInterval);
+      mediaRecorder.stop();
+      restoreForm();
+    };
+
+    el('btn-cancel-record').onclick = () => {
+      clearInterval(recordInterval);
+      mediaRecorder.stop();
+      audioChunks.length = 0;
+      restoreForm();
+    };
+
+    function restoreForm() {
+      selectChat(currentActiveChatId, el('chats-header-name').textContent, activeChat.avatarUrl);
+    }
+  }).catch(err => {
+    console.error('Mic access failed:', err);
+    toast('Could not access microphone.', 'error');
+  });
+}
+
+// Browser Geolocation position sharing
+function shareCurrentLocation() {
+  if (!navigator.geolocation) {
+    toast('Geolocation is not supported by your browser.', 'warning');
+    return;
+  }
+  toast('Fetching location...', 'info');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+    const payload = JSON.stringify({
+      type: 'location',
+      lat,
+      lon,
+      mapsUrl
+    });
+    sendChatMessage(`[LOCATION_JSON]:${payload}`);
+  }, err => {
+    console.error('Location fetch failed:', err);
+    toast('Failed to retrieve location.', 'error');
+  });
+}
+
+// Matched contact sharing card
+async function shareContactCard() {
+  try {
+    const matchesData = await api('GET', '/api/matches').catch(() => ({ matches: [] }));
+    const matches = matchesData.matches || [];
+    if (matches.length === 0) {
+      toast('No contacts available to share.', 'warning');
+      return;
+    }
+    const choice = prompt(`Select contact to share:\n` + matches.map((m, i) => `${i + 1}. ${m.fullname || m.username}`).join('\n'));
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < matches.length) {
+      const selectedPeer = matches[idx];
+      const payload = JSON.stringify({
+        type: 'contact',
+        peerId: selectedPeer.id,
+        peerName: selectedPeer.fullname || selectedPeer.username,
+        peerBio: selectedPeer.bio || 'No bio provided'
+      });
+      sendChatMessage(`[CONTACT_JSON]:${payload}`);
+    }
+  } catch (err) {
+    console.error(err);
   }
 }

@@ -161,14 +161,14 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
 
 // PUT /api/users/me
 app.put('/api/users/me', requireAuth, async (req, res) => {
-  const { fullname, bio, avatar_url } = req.body;
+  const { fullname, bio, avatar_url, hide_last_seen } = req.body;
   try {
     await db.run(
-      'UPDATE users SET full_name = ?, bio = ?, avatar_url = ? WHERE id = ?',
-      [fullname, bio, avatar_url || null, req.session.userId]
+      'UPDATE users SET full_name = ?, bio = ?, avatar_url = ?, hide_last_seen = ? WHERE id = ?',
+      [fullname, bio, avatar_url || null, hide_last_seen ? 1 : 0, req.session.userId]
     );
     const user = await db.get(
-      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name AS fullname, bio, avatar_url, credits, average_rating, hide_last_seen FROM users WHERE id = ?',
       [req.session.userId]
     );
     res.json({ user });
@@ -821,6 +821,26 @@ app.delete('/api/groups/:id/members/:userId', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/groups/:id/join - Join a group via link
+app.post('/api/groups/:id/join', requireAuth, async (req, res) => {
+  const groupId = parseInt(req.params.id);
+  const userId = req.session.userId;
+  try {
+    const group = await db.get('SELECT id FROM groups WHERE id = ?', [groupId]);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    const existing = await db.get('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+    if (existing) {
+      return res.json({ success: true, message: 'Already a member.' });
+    }
+
+    await db.run('INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)', [groupId, userId, 'member']);
+    res.json({ success: true, message: 'Joined group successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to join group: ' + err.message });
+  }
+});
+
 // =====================================================
 //  SOCKET.IO — REAL-TIME EVENTS
 // =====================================================
@@ -883,7 +903,7 @@ setInterval(() => {
 io.on('connection', socket => {
   let authenticatedUserId = null;
 
-  socket.on('authenticate', userId => {
+  socket.on('authenticate', async userId => {
     authenticatedUserId = parseInt(userId);
     
     // Clean up any stale sockets previously mapped to this user to avoid presence desync
@@ -902,11 +922,24 @@ io.on('connection', socket => {
     onlineUsers.set(authenticatedUserId, socket.id);
     socket.join(`user_${authenticatedUserId}`);
     
-    // Instantly send list of online users to the newly connected user
-    socket.emit('online_users_list', Array.from(onlineUsers.keys()));
+    // Instantly send list of online users to the newly connected user, respecting hide_last_seen preferences
+    const me = await db.get('SELECT hide_last_seen FROM users WHERE id = ?', [authenticatedUserId]);
+    const hideLastSeen = me ? me.hide_last_seen === 1 : false;
+
+    const onlineIds = Array.from(onlineUsers.keys());
+    const visibleOnlineUsers = [];
+    for (const oId of onlineIds) {
+      const u = await db.get('SELECT hide_last_seen FROM users WHERE id = ?', [oId]);
+      if (!u || u.hide_last_seen !== 1 || oId === authenticatedUserId) {
+        visibleOnlineUsers.push(oId);
+      }
+    }
     
-    // Broadcast presence change to other users
-    socket.broadcast.emit('user_online', authenticatedUserId);
+    socket.emit('online_users_list', visibleOnlineUsers);
+    
+    if (!hideLastSeen) {
+      socket.broadcast.emit('user_online', authenticatedUserId);
+    }
     console.log(`User ${authenticatedUserId} connected (socket: ${socket.id})`);
   });
 
@@ -1356,6 +1389,15 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('mute_all_participants', ({ roomId }) => {
+    if (!authenticatedUserId) return;
+    const room = groupRooms.get(roomId);
+    if (room && room.hostId === authenticatedUserId) {
+      socket.to(roomId).emit('force_mute_mic');
+      console.log(`Host ${authenticatedUserId} muted all participants in room ${roomId}`);
+    }
+  });
+
   socket.on('group_signal', ({ toSocketId, signalData }) => {
     io.to(toSocketId).emit('group_signal', {
       fromSocketId: socket.id,
@@ -1391,7 +1433,14 @@ io.on('connection', socket => {
     if (authenticatedUserId) {
       if (onlineUsers.get(authenticatedUserId) === socket.id) {
         onlineUsers.delete(authenticatedUserId);
-        io.emit('user_offline', authenticatedUserId);
+        
+        const me = await db.get('SELECT hide_last_seen FROM users WHERE id = ?', [authenticatedUserId]);
+        const hide = me && me.hide_last_seen === 1;
+        if (!hide) {
+          io.emit('user_offline', authenticatedUserId);
+          await db.run('UPDATE users SET last_seen = ? WHERE id = ?', [new Date().toISOString(), authenticatedUserId]);
+        }
+        
         console.log(`User ${authenticatedUserId} disconnected`);
       }
 
