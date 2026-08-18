@@ -484,6 +484,10 @@
                     <button class="btn btn-accent btn-sm" id="chats-start-call-btn">
                       <i class="fa-solid fa-video"></i> Start Class
                     </button>
+                    <!-- Search messages button -->
+                    <button class="btn btn-ghost btn-sm" id="chats-toggle-search-btn" title="Search messages" style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center;">
+                      <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
                     <!-- Members Toggle Button -->
                     <button class="btn btn-ghost btn-sm hidden" id="chats-toggle-members-btn">
                       <i class="fa-solid fa-users"></i> Members
@@ -494,7 +498,24 @@
                     </button>
                   </div>
                 </div>
+
+                <!-- Local Message Search Input Bar -->
+                <div id="chats-local-search-container" class="hidden" style="padding: 8px 12px; background: rgba(0,0,0,0.15); border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px; align-items: center;">
+                  <input type="text" id="chats-local-search-input" placeholder="Search messages in this chat..." autocomplete="off" style="flex: 1; padding: 6px 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 16px; color: var(--text-primary); font-size: 0.85rem; outline: none;">
+                  <button type="button" id="chats-local-search-close" class="btn btn-ghost btn-sm" style="padding: 0 8px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <div class="chat-messages-area" id="chats-messages-log" style="height: calc(100% - 130px); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;"></div>
+
+                <!-- Reply Quoted Preview Bar -->
+                <div id="chats-reply-preview-bar" class="hidden" style="padding: 8px 16px; background: rgba(139,92,246,0.1); border-left: 4px solid var(--accent); border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+                  <div style="min-width: 0; flex: 1;">
+                    <div style="font-weight: 600; color: var(--accent);" id="chats-reply-preview-title">Replying to username</div>
+                    <div style="color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem;" id="chats-reply-preview-text">Message preview...</div>
+                  </div>
+                  <button type="button" id="chats-reply-cancel-btn" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <form id="chats-input-form" class="chat-input-bar" style="padding: 12px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 8px; align-items: center;">
                   <!-- Hidden File Input -->
                   <input type="file" id="chats-file-input" style="display: none;">

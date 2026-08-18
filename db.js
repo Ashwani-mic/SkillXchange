@@ -139,6 +139,14 @@ async function initDatabase() {
     await run('ALTER TABLE users ADD COLUMN avatar_url TEXT');
     console.log('Migration: added avatar_url column');
   }
+  if (!userColNames.includes('last_seen')) {
+    await run('ALTER TABLE users ADD COLUMN last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+    console.log('Migration: added last_seen column');
+  }
+  if (!userColNames.includes('hide_last_seen')) {
+    await run('ALTER TABLE users ADD COLUMN hide_last_seen INTEGER DEFAULT 0');
+    console.log('Migration: added hide_last_seen column');
+  }
 
   // ---- USER_SKILLS TABLE ----
   await run(`
@@ -201,6 +209,26 @@ async function initDatabase() {
       await run('ALTER TABLE messages ADD COLUMN timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
       await run('UPDATE messages SET timestamp = created_at');
       console.log('Migration: added timestamp column');
+    }
+    if (!msgColNames.includes('status')) {
+      await run('ALTER TABLE messages ADD COLUMN status VARCHAR(20) DEFAULT \'sent\'');
+      console.log('Migration: added status column');
+    }
+    if (!msgColNames.includes('reply_to_id')) {
+      await run('ALTER TABLE messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL');
+      console.log('Migration: added reply_to_id column');
+    }
+    if (!msgColNames.includes('is_edited')) {
+      await run('ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0');
+      console.log('Migration: added is_edited column');
+    }
+    if (!msgColNames.includes('is_deleted')) {
+      await run('ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0');
+      console.log('Migration: added is_deleted column');
+    }
+    if (!msgColNames.includes('reactions')) {
+      await run('ALTER TABLE messages ADD COLUMN reactions TEXT DEFAULT \'[]\'');
+      console.log('Migration: added reactions column');
     }
   } catch (e) {
     console.error('Messages migration error:', e.message);
@@ -334,6 +362,41 @@ async function initDatabase() {
     )
   `);
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS group_message_receipts (
+      message_id       INTEGER NOT NULL,
+      user_id          INTEGER NOT NULL,
+      read_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(message_id, user_id),
+      FOREIGN KEY(message_id) REFERENCES group_messages(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Migrate group_messages table
+  try {
+    const gMsgCols = await all("SELECT column_name FROM information_schema.columns WHERE table_name = 'group_messages'");
+    const gMsgColNames = gMsgCols.map(c => c.column_name);
+    if (!gMsgColNames.includes('reply_to_id')) {
+      await run('ALTER TABLE group_messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL');
+      console.log('Migration: added reply_to_id to group_messages');
+    }
+    if (!gMsgColNames.includes('is_edited')) {
+      await run('ALTER TABLE group_messages ADD COLUMN is_edited INTEGER DEFAULT 0');
+      console.log('Migration: added is_edited to group_messages');
+    }
+    if (!gMsgColNames.includes('is_deleted')) {
+      await run('ALTER TABLE group_messages ADD COLUMN is_deleted INTEGER DEFAULT 0');
+      console.log('Migration: added is_deleted to group_messages');
+    }
+    if (!gMsgColNames.includes('reactions')) {
+      await run('ALTER TABLE group_messages ADD COLUMN reactions TEXT DEFAULT \'[]\'');
+      console.log('Migration: added reactions to group_messages');
+    }
+  } catch (e) {
+    console.error('Group messages migration error:', e.message);
+  }
+
   // ---- INDEXES FOR OPTIMIZED QUERY PERFORMANCE ----
   await run(`CREATE INDEX IF NOT EXISTS idx_user_skills_user_id ON user_skills(user_id)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id)`);
@@ -401,17 +464,17 @@ async function saveCallLog(callerId, receiverId, callType, status) {
 }
 
 // Helper to save direct messages supporting both schemas with and without content column
-async function saveDirectMessage(senderId, receiverId, messageText) {
+async function saveDirectMessage(senderId, receiverId, messageText, replyToId = null) {
   try {
     if (hasContentColumn) {
       return await run(
-        'INSERT INTO messages (sender_id, receiver_id, content, message, message_text, timestamp) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-        [senderId, receiverId, messageText, messageText, messageText]
+        'INSERT INTO messages (sender_id, receiver_id, content, message, message_text, reply_to_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+        [senderId, receiverId, messageText, messageText, messageText, replyToId]
       );
     } else {
       return await run(
-        'INSERT INTO messages (sender_id, receiver_id, message, message_text, timestamp) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
-        [senderId, receiverId, messageText, messageText]
+        'INSERT INTO messages (sender_id, receiver_id, message, message_text, reply_to_id, timestamp) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+        [senderId, receiverId, messageText, messageText, replyToId]
       );
     }
   } catch (e) {

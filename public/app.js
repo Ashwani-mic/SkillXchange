@@ -20,6 +20,14 @@ let groupRoomId = null;
 let activeCallPartnerId = null;
 let activeUploadFile = null;
 let activeUploadDataUrl = null;
+let activeReplyMessageId = null;
+let editMessageId = null;
+let offlineMessageQueue = [];
+let typingTimeout = null;
+let isTyping = false;
+let audioContext = null;
+let audioAnalysers = {}; // socketId -> AnalyserNode
+let screenShareTrack = null;
 let groupPeerConnections = {}; // socketId -> RTCPeerConnection
 let groupParticipants = []; // array of { userId, socketId, userName, status }
 let classroomGroupMembers = []; // array of candidates that can be invited
@@ -355,12 +363,18 @@ function initSocketIO() {
   });
 
   socket.on('receive_message', msg => {
-    const isActiveTab = (activeChat.partnerId === msg.sender_id);
+    const isActiveTab = (activeChat.partnerId === msg.sender_id) || (currentActiveChatId === msg.sender_id);
     if (isActiveTab) {
+      socket.emit('mark_as_read', { partner_id: msg.sender_id });
+    }
+
+    const logEl = el('chats-messages-log');
+    const isChatsTabActive = (currentActiveChatId === msg.sender_id);
+    if (logEl && isChatsTabActive) {
       if (msg.is_call_log) {
-        appendChatMessage(msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
+        appendChatMessageToElement(logEl, msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
       } else {
-        appendChatMessage(msg.message, 'incoming');
+        appendChatMessageToElement(logEl, msg.message, 'incoming', null, msg.id, msg.status, msg.reply_to_id, msg.reactions);
       }
     } else {
       if (!msg.is_call_log) {
@@ -369,20 +383,126 @@ function initSocketIO() {
       }
     }
 
-    // Also update full Chats tab log if active
-    const logEl = el('chats-messages-log');
-    const isChatsTabActive = (currentActiveChatId === msg.sender_id);
-    if (logEl && isChatsTabActive) {
-      if (msg.is_call_log) {
-        appendChatMessageToElement(logEl, msg.message, msg.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
-      } else {
-        appendChatMessageToElement(logEl, msg.message, 'incoming');
+    if (!msg.is_call_log && (document.hidden || !isActiveTab)) {
+      triggerNewMessageNotification(msg.sender_name, getMessagePreviewText(msg.message));
+    }
+  });
+
+  socket.on('message_status_update', ({ id, status }) => {
+    const bubble = document.querySelector(`.msg-bubble[data-msg-id="${id}"]`);
+    if (bubble) {
+      updateBubbleStatusUI(bubble, status);
+    }
+  });
+
+  socket.on('messages_read_by_peer', ({ reader_id }) => {
+    if (currentActiveChatId === reader_id) {
+      document.querySelectorAll('.msg-bubble.outgoing .msg-status-tick').forEach(tick => {
+        tick.className = 'fa-solid fa-check-double msg-status-tick';
+        tick.style.color = '#3b82f6';
+      });
+    }
+  });
+
+  socket.on('user_typing', ({ sender_id, group_id, username }) => {
+    if (group_id) {
+      if (currentActiveChatId === `group_${group_id}`) {
+        const headerStatus = el('chats-header-status');
+        if (headerStatus) {
+          headerStatus.innerHTML = `${username} is typing<span class="typing-dot">.</span><span class="typing-dot">.</span><span class="typing-dot">.</span>`;
+        }
+      }
+    } else {
+      if (currentActiveChatId === sender_id) {
+        const headerStatus = el('chats-header-status');
+        if (headerStatus) {
+          headerStatus.innerHTML = `typing<span class="typing-dot">.</span><span class="typing-dot">.</span><span class="typing-dot">.</span>`;
+        }
+      }
+      const userItemMessage = document.querySelector(`.chat-item[data-user-id="${sender_id}"] .chat-item-message`);
+      if (userItemMessage) {
+        userItemMessage.textContent = 'typing...';
+        userItemMessage.style.color = 'var(--accent)';
       }
     }
+  });
 
-    // Trigger notification if message is new and window/tab is inactive
-    if (!msg.is_call_log && (document.hidden || !isActiveTab)) {
-      triggerNewMessageNotification(msg.sender_name, msg.message);
+  socket.on('user_stop_typing', ({ sender_id, group_id }) => {
+    const headerStatus = el('chats-header-status');
+    if (group_id) {
+      if (currentActiveChatId === `group_${group_id}`) {
+        if (headerStatus) headerStatus.textContent = 'Group Chat';
+      }
+    } else {
+      if (currentActiveChatId === sender_id) {
+        const isOnline = onlineUserIdsSet.has(sender_id);
+        if (headerStatus) {
+          headerStatus.textContent = isOnline ? 'online' : 'offline';
+        }
+      }
+      loadChatsPage();
+    }
+  });
+
+  socket.on('message_edited', ({ id, is_group, message }) => {
+    const bubble = document.querySelector(`.msg-bubble[data-msg-id="${id}"]`);
+    if (bubble) {
+      const textEl = bubble.querySelector('.msg-text-content') || bubble;
+      const nameSpan = textEl.querySelector('span');
+      textEl.innerHTML = '';
+      if (nameSpan) textEl.appendChild(nameSpan);
+      textEl.appendChild(document.createTextNode(message));
+      
+      let editedLabel = bubble.querySelector('.msg-edited-label');
+      if (!editedLabel) {
+        editedLabel = document.createElement('span');
+        editedLabel.className = 'msg-edited-label';
+        editedLabel.style.cssText = 'font-size: 0.65rem; color: var(--text-muted); margin-left: 6px; font-style: italic;';
+        editedLabel.textContent = '(edited)';
+        bubble.appendChild(editedLabel);
+      }
+    }
+  });
+
+  socket.on('message_deleted', ({ id }) => {
+    const bubble = document.querySelector(`.msg-bubble[data-msg-id="${id}"]`);
+    if (bubble) {
+      const textEl = bubble.querySelector('.msg-text-content') || bubble;
+      const nameSpan = textEl.querySelector('span');
+      textEl.innerHTML = '';
+      if (nameSpan) textEl.appendChild(nameSpan);
+      
+      const deletedSpan = document.createElement('span');
+      deletedSpan.style.cssText = 'color: var(--text-muted); font-style: italic; font-size: 0.85rem; display: flex; align-items: center; gap: 4px;';
+      deletedSpan.innerHTML = '<i class="fa-solid fa-ban" style="font-size: 0.75rem;"></i> This message was deleted';
+      textEl.appendChild(deletedSpan);
+      
+      const actions = bubble.querySelector('.msg-action-btn');
+      if (actions) actions.remove();
+    }
+  });
+
+  socket.on('message_reacted', ({ id, reactions }) => {
+    const bubble = document.querySelector(`.msg-bubble[data-msg-id="${id}"]`);
+    if (bubble) {
+      renderBubbleReactions(bubble, id, reactions);
+    }
+  });
+
+  socket.on('peer_raise_hand', ({ socketId, userId, is_raised }) => {
+    const feed = el(`feed_${socketId}`) || el('feed_local');
+    if (feed) {
+      let hand = feed.querySelector('.raise-hand-overlay');
+      if (is_raised) {
+        if (!hand) {
+          hand = document.createElement('div');
+          hand.className = 'raise-hand-overlay';
+          hand.innerHTML = '✋';
+          feed.appendChild(hand);
+        }
+      } else {
+        if (hand) hand.remove();
+      }
     }
   });
 
@@ -579,6 +699,7 @@ function initSocketIO() {
       delete groupPeerConnections[socketId];
     }
     el(`feed_${socketId}`)?.remove();
+    updateVideoGridLayout();
   });
 
   socket.on('group_participants_update', (participants) => {
@@ -2131,9 +2252,14 @@ function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, e) {
       videoEl.srcObject.addTrack(e.track);
     }
     
-    // Show video and hide the mock placeholder
     videoEl.style.display = 'block';
     if (mockEl) mockEl.style.display = 'none';
+    
+    // Initialize active speaker highlighting and re-flow grid
+    if (videoEl.srcObject) {
+      startSpeakerHighlighting(videoEl.srcObject, el(`feed_${peerSocketId}`));
+    }
+    updateVideoGridLayout();
   }
   
   const pIdx = groupParticipants.findIndex(p => p.userId === peerUserId);
@@ -2715,6 +2841,71 @@ function initChatsPage() {
     });
   });
 
+  // Local Message Search Toggle
+  el('chats-toggle-search-btn')?.addEventListener('click', () => {
+    const container = el('chats-local-search-container');
+    container.classList.toggle('hidden');
+    if (!container.classList.contains('hidden')) {
+      el('chats-local-search-input').focus();
+    } else {
+      el('chats-local-search-input').value = '';
+      // Reset filter
+      document.querySelectorAll('.msg-bubble').forEach(b => b.style.display = '');
+    }
+  });
+
+  el('chats-local-search-close')?.addEventListener('click', () => {
+    el('chats-local-search-container').classList.add('hidden');
+    el('chats-local-search-input').value = '';
+    document.querySelectorAll('.msg-bubble').forEach(b => b.style.display = '');
+  });
+
+  el('chats-local-search-input')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('.msg-bubble').forEach(bubble => {
+      const textEl = bubble.querySelector('.msg-text-content') || bubble;
+      if (!q) {
+        bubble.style.display = '';
+      } else {
+        bubble.style.display = textEl.textContent.toLowerCase().includes(q) ? '' : 'none';
+      }
+    });
+  });
+
+  // Quoted Reply Cancel button
+  el('chats-reply-cancel-btn')?.addEventListener('click', () => {
+    clearReplyPreview();
+  });
+
+  // Typing state emissions on keyboard input
+  const inputEl = el('chats-message-input');
+  inputEl?.addEventListener('input', () => {
+    if (!currentActiveChatId || !socket || !socket.connected) return;
+    const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
+    const receiverId = isGroup ? currentActiveChatId.replace('group_', '') : currentActiveChatId;
+
+    if (!isTyping) {
+      isTyping = true;
+      socket.emit('typing', { receiver_id: receiverId, is_group: isGroup });
+    }
+
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      isTyping = false;
+      socket.emit('stop_typing', { receiver_id: receiverId, is_group: isGroup });
+    }, 2000);
+  });
+
+  // Escape key cancels Editing mode
+  inputEl?.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && editMessageId) {
+      editMessageId = null;
+      inputEl.value = '';
+      inputEl.style.border = '';
+      toast('Edit cancelled', 'info');
+    }
+  });
+
   el('chats-input-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const input = el('chats-message-input');
@@ -2722,6 +2913,15 @@ function initChatsPage() {
     if (!message || !currentActiveChatId) return;
 
     try {
+      // If typing, stop it immediately on send
+      if (isTyping) {
+        isTyping = false;
+        const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
+        const receiverId = isGroup ? currentActiveChatId.replace('group_', '') : currentActiveChatId;
+        socket.emit('stop_typing', { receiver_id: receiverId, is_group: isGroup });
+        clearTimeout(typingTimeout);
+      }
+
       await sendChatMessage(message);
       input.value = '';
     } catch (err) {
@@ -2734,25 +2934,93 @@ async function sendChatMessage(message) {
   const isGroup = typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_');
   const logEl = el('chats-messages-log');
 
+  // Handle Editing mode
+  if (editMessageId) {
+    if (socket && socket.connected) {
+      socket.emit('edit_message', { id: editMessageId, is_group: isGroup, message });
+    }
+    editMessageId = null;
+    el('chats-message-input').style.border = '';
+    return;
+  }
+
+  // Handle Offline Queuing if offline
+  if (!navigator.onLine) {
+    saveOfflineMessage({
+      chatId: currentActiveChatId,
+      message,
+      replyToId: activeReplyMessageId,
+      timestamp: new Date().toISOString()
+    });
+    appendChatMessageToElement(logEl, message, 'outgoing', null, `offline_${Date.now()}`, 'offline', activeReplyMessageId);
+    clearReplyPreview();
+    return;
+  }
+
+  const replyToId = activeReplyMessageId;
+  clearReplyPreview();
+
   if (isGroup) {
     const groupId = currentActiveChatId.replace('group_', '');
     if (socket && socket.connected) {
-      socket.emit('send_group_message', { group_id: groupId, message });
-      appendChatMessageToElement(logEl, message, 'outgoing');
+      socket.emit('send_group_message', { group_id: groupId, message, reply_to_id: replyToId });
+      appendChatMessageToElement(logEl, message, 'outgoing', null, null, 'sent', replyToId);
     } else {
-      await api('POST', `/api/groups/${groupId}/messages`, { message });
-      appendChatMessageToElement(logEl, message, 'outgoing');
+      const res = await api('POST', `/api/groups/${groupId}/messages`, { message, reply_to_id: replyToId });
+      appendChatMessageToElement(logEl, message, 'outgoing', null, res.id, 'sent', replyToId);
     }
   } else {
     if (socket && socket.connected) {
-      socket.emit('send_message', { receiver_id: currentActiveChatId, message, sender_name: currentUser.username });
-      appendChatMessageToElement(logEl, message, 'outgoing');
+      socket.emit('send_message', { receiver_id: currentActiveChatId, message, sender_name: currentUser.username, reply_to_id: replyToId });
+      appendChatMessageToElement(logEl, message, 'outgoing', null, null, 'sent', replyToId);
     } else {
-      await api('POST', '/api/messages', { receiver_id: currentActiveChatId, message });
-      appendChatMessageToElement(logEl, message, 'outgoing');
+      const res = await api('POST', '/api/messages', { receiver_id: currentActiveChatId, message, reply_to_id: replyToId });
+      appendChatMessageToElement(logEl, message, 'outgoing', null, res.id, 'sent', replyToId);
     }
   }
 }
+
+function clearReplyPreview() {
+  activeReplyMessageId = null;
+  el('chats-reply-preview-bar').classList.add('hidden');
+}
+
+function saveOfflineMessage(msg) {
+  offlineMessageQueue.push(msg);
+  localStorage.setItem('offline_messages_queue', JSON.stringify(offlineMessageQueue));
+  toast('You are offline. Message queued and will send on reconnect.', 'warning');
+}
+
+async function flushOfflineMessages() {
+  if (offlineMessageQueue.length === 0) return;
+  toast('Connection restored! Sending queued messages...', 'success');
+  const queue = [...offlineMessageQueue];
+  offlineMessageQueue = [];
+  localStorage.removeItem('offline_messages_queue');
+  
+  for (const msg of queue) {
+    if (msg.chatId === currentActiveChatId) {
+      document.querySelectorAll('.msg-bubble[data-msg-id^="offline_"]').forEach(b => b.remove());
+    }
+    try {
+      currentActiveChatId = msg.chatId;
+      activeReplyMessageId = msg.replyToId;
+      await sendChatMessage(msg.message);
+    } catch (e) {
+      console.error('Failed to send offline message:', e);
+    }
+  }
+}
+
+window.addEventListener('online', flushOfflineMessages);
+window.addEventListener('load', () => {
+  try {
+    offlineMessageQueue = JSON.parse(localStorage.getItem('offline_messages_queue') || '[]');
+    if (navigator.onLine && offlineMessageQueue.length > 0) {
+      flushOfflineMessages();
+    }
+  } catch {}
+});
 
 async function loadChatsPage() {
   const listContainer = el('chats-list-container');
@@ -3045,8 +3313,12 @@ async function selectChat(id, name, avatarUrl) {
       const data = await api('GET', `/api/groups/${groupId}/messages`);
       logEl.innerHTML = '';
       data.messages.forEach(m => {
-        appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', m.sender_name);
+        appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', m.sender_name, m.id, 'sent', m.reply_to_id, m.reactions, m.is_edited, m.is_deleted);
       });
+      // Mark group messages as read
+      if (socket && socket.connected) {
+        socket.emit('mark_group_as_read', { group_id: groupId });
+      }
     } else {
       const data = await api('GET', `/api/messages/${id}`);
       logEl.innerHTML = '';
@@ -3054,9 +3326,13 @@ async function selectChat(id, name, avatarUrl) {
         if (m.is_call_log) {
           appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing call-log' : 'incoming call-log');
         } else {
-          appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming');
+          appendChatMessageToElement(logEl, m.message, m.sender_id === currentUser.id ? 'outgoing' : 'incoming', null, m.id, m.status, m.reply_to_id, m.reactions, m.is_edited, m.is_deleted);
         }
       });
+      // Mark direct messages as read
+      if (socket && socket.connected) {
+        socket.emit('mark_as_read', { partner_id: id });
+      }
     }
     logEl.scrollTop = logEl.scrollHeight;
   } catch (err) {
@@ -3064,17 +3340,42 @@ async function selectChat(id, name, avatarUrl) {
   }
 }
 
-function appendChatMessageToElement(logEl, text, direction, senderName = null) {
+function appendChatMessageToElement(logEl, text, direction, senderName = null, id = null, status = 'sent', replyToId = null, reactions = '[]', isEdited = 0, isDeleted = 0) {
   const div = document.createElement('div');
   div.className = `msg-bubble ${direction}`;
+  if (id) div.setAttribute('data-msg-id', id);
+
+  // Render reply quote box if this message is a reply to another message
+  if (replyToId) {
+    const quoteDiv = document.createElement('div');
+    quoteDiv.className = 'msg-quote-box';
+    const origMsg = document.querySelector(`.msg-bubble[data-msg-id="${replyToId}"]`);
+    let quoteText = 'Original message';
+    if (origMsg) {
+      const textEl = origMsg.querySelector('.msg-text-content') || origMsg;
+      quoteText = textEl.textContent.trim();
+    }
+    quoteDiv.textContent = quoteText;
+    quoteDiv.addEventListener('click', () => {
+      origMsg?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      origMsg?.style.setProperty('background', 'rgba(139,92,246,0.3)', 'important');
+      setTimeout(() => {
+        origMsg?.style.setProperty('background', '');
+      }, 1000);
+    });
+    div.appendChild(quoteDiv);
+  }
+
+  const textEl = document.createElement('span');
+  textEl.className = 'msg-text-content';
   
   if (direction.includes('call-log')) {
-    div.innerHTML = text;
+    textEl.innerHTML = text;
+    div.appendChild(textEl);
   } else if (text.startsWith('[FILE_JSON]:')) {
     try {
       const fileInfo = JSON.parse(text.slice(12));
       
-      // Render name header if incoming
       if (senderName && direction === 'incoming') {
         const nameSpan = document.createElement('span');
         nameSpan.style.display = 'block';
@@ -3083,11 +3384,10 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
         nameSpan.style.fontWeight = '700';
         nameSpan.style.marginBottom = '4px';
         nameSpan.textContent = senderName;
-        div.appendChild(nameSpan);
+        textEl.appendChild(nameSpan);
       }
 
       if (fileInfo.type === 'image') {
-        // Image message bubble
         const img = document.createElement('img');
         img.src = fileInfo.fileData;
         img.style.cssText = 'max-width: 100%; max-height: 200px; border-radius: 8px; cursor: pointer; display: block; object-fit: cover;';
@@ -3096,9 +3396,8 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
           el('viewer-img').src = fileInfo.fileData;
           el('image-viewer-overlay').classList.remove('hidden');
         });
-        div.appendChild(img);
+        textEl.appendChild(img);
       } else {
-        // Document message bubble
         const docCard = document.createElement('a');
         docCard.href = fileInfo.fileData;
         docCard.download = fileInfo.fileName;
@@ -3110,19 +3409,20 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
             <div style="font-size: 0.72rem; color: var(--text-muted);">${formatBytes(fileInfo.fileSize)}</div>
           </div>
         `;
-        div.appendChild(docCard);
+        textEl.appendChild(docCard);
       }
 
       if (fileInfo.caption) {
         const captionDiv = document.createElement('div');
         captionDiv.style.cssText = 'margin-top: 6px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;';
         captionDiv.textContent = fileInfo.caption;
-        div.appendChild(captionDiv);
+        textEl.appendChild(captionDiv);
       }
-
+      div.appendChild(textEl);
     } catch (e) {
       console.error('Failed to parse file payload:', e);
-      div.textContent = '[Corrupted attachment]';
+      textEl.textContent = '[Corrupted attachment]';
+      div.appendChild(textEl);
     }
   } else {
     if (senderName && direction === 'incoming') {
@@ -3133,14 +3433,254 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null) {
       nameSpan.style.fontWeight = '700';
       nameSpan.style.marginBottom = '4px';
       nameSpan.textContent = senderName;
-      div.appendChild(nameSpan);
-      div.appendChild(document.createTextNode(text));
+      textEl.appendChild(nameSpan);
+      textEl.appendChild(document.createTextNode(text));
     } else {
-      div.appendChild(document.createTextNode(text));
+      textEl.appendChild(document.createTextNode(text));
     }
+    div.appendChild(textEl);
   }
+
+  // Display status tick for outgoing chat bubbles
+  if (direction === 'outgoing' && !direction.includes('call-log')) {
+    const tick = document.createElement('i');
+    tick.style.cssText = 'font-size: 0.72rem; margin-left: 6px; vertical-align: middle; float: right; margin-top: 6px;';
+    if (status === 'read') {
+      tick.className = 'fa-solid fa-check-double msg-status-tick';
+      tick.style.color = '#3b82f6';
+    } else if (status === 'delivered') {
+      tick.className = 'fa-solid fa-check-double msg-status-tick';
+      tick.style.color = 'var(--text-muted)';
+    } else {
+      tick.className = 'fa-solid fa-check msg-status-tick';
+      tick.style.color = 'var(--text-muted)';
+    }
+    div.appendChild(tick);
+  }
+
+  // Render (edited) indicator label if applicable
+  if (isEdited) {
+    const editedLabel = document.createElement('span');
+    editedLabel.className = 'msg-edited-label';
+    editedLabel.style.cssText = 'font-size: 0.65rem; color: var(--text-muted); margin-left: 6px; font-style: italic;';
+    editedLabel.textContent = '(edited)';
+    div.appendChild(editedLabel);
+  }
+
+  // Action actions popup toggle trigger
+  if (id && !direction.includes('call-log')) {
+    const actionBtn = document.createElement('span');
+    actionBtn.className = 'msg-action-btn';
+    actionBtn.innerHTML = '<i class="fa-solid fa-ellipsis-vertical" style="padding: 4px; border-radius: 50%;"></i>';
+    actionBtn.title = 'Message options';
+    actionBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      showMsgActionsMenu(div, id, text, direction);
+    });
+    div.appendChild(actionBtn);
+  }
+
+  // Reactions rendering
+  if (id && reactions) {
+    renderBubbleReactions(div, id, reactions);
+  }
+
   logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+function showMsgActionsMenu(bubble, id, text, direction) {
+  document.querySelectorAll('.msg-actions-menu').forEach(m => m.remove());
+  document.querySelectorAll('.msg-reactions-picker').forEach(p => p.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'msg-actions-menu';
+  menu.style.cssText = 'position: absolute; background: #0f1322; border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); padding: 4px; display: flex; flex-direction: column; gap: 4px; z-index: 1000; font-size: 0.8rem;';
+
+  const rect = bubble.getBoundingClientRect();
+  const parentRect = bubble.parentElement.getBoundingClientRect();
+  menu.style.top = (rect.top - parentRect.top - 40) + 'px';
+  menu.style.left = (rect.left - parentRect.left + rect.width / 2 - 50) + 'px';
+
+  // React item
+  const reactBtn = document.createElement('button');
+  reactBtn.style.cssText = 'background: transparent; border: none; color: #fff; padding: 6px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-family: inherit; font-size: 0.78rem; border-radius: 4px;';
+  reactBtn.innerHTML = '<i class="fa-solid fa-face-smile" style="color: #eab308;"></i> React';
+  reactBtn.onmouseenter = () => reactBtn.style.background = 'rgba(255,255,255,0.05)';
+  reactBtn.onmouseleave = () => reactBtn.style.background = 'transparent';
+  reactBtn.onclick = () => {
+    menu.remove();
+    showEmojiPicker(bubble, id);
+  };
+  menu.appendChild(reactBtn);
+
+  // Reply item
+  const replyBtn = document.createElement('button');
+  replyBtn.style.cssText = 'background: transparent; border: none; color: #fff; padding: 6px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-family: inherit; font-size: 0.78rem; border-radius: 4px;';
+  replyBtn.innerHTML = '<i class="fa-solid fa-reply" style="color: var(--accent);"></i> Reply';
+  replyBtn.onmouseenter = () => replyBtn.style.background = 'rgba(255,255,255,0.05)';
+  replyBtn.onmouseleave = () => replyBtn.style.background = 'transparent';
+  replyBtn.onclick = () => {
+    menu.remove();
+    startQuotedReply(id, text);
+  };
+  menu.appendChild(replyBtn);
+
+  // Edit / Delete outgoing only
+  if (direction === 'outgoing') {
+    const editBtn = document.createElement('button');
+    editBtn.style.cssText = 'background: transparent; border: none; color: #fff; padding: 6px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-family: inherit; font-size: 0.78rem; border-radius: 4px;';
+    editBtn.innerHTML = '<i class="fa-solid fa-pen" style="color: #3b82f6;"></i> Edit';
+    editBtn.onmouseenter = () => editBtn.style.background = 'rgba(255,255,255,0.05)';
+    editBtn.onmouseleave = () => editBtn.style.background = 'transparent';
+    editBtn.onclick = () => {
+      menu.remove();
+      startEditingMessage(id, text);
+    };
+    menu.appendChild(editBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.style.cssText = 'background: transparent; border: none; color: #f43f5e; padding: 6px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; font-family: inherit; font-size: 0.78rem; border-radius: 4px;';
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Delete';
+    deleteBtn.onmouseenter = () => deleteBtn.style.background = 'rgba(244,63,94,0.1)';
+    deleteBtn.onmouseleave = () => deleteBtn.style.background = 'transparent';
+    deleteBtn.onclick = () => {
+      menu.remove();
+      if (confirm('Delete this message for everyone?')) {
+        socket.emit('delete_message', { id, is_group: (typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_')) });
+      }
+    };
+    menu.appendChild(deleteBtn);
+  }
+
+  bubble.parentElement.appendChild(menu);
+
+  const closeHandler = () => {
+    menu.remove();
+    document.removeEventListener('click', closeHandler);
+  };
+  setTimeout(() => document.addEventListener('click', closeHandler), 100);
+}
+
+function showEmojiPicker(bubble, id) {
+  const picker = document.createElement('div');
+  picker.className = 'msg-reactions-picker';
+
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  emojis.forEach(e => {
+    const span = document.createElement('span');
+    span.textContent = e;
+    span.onclick = () => {
+      picker.remove();
+      socket.emit('react_message', {
+        id,
+        is_group: (typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_')),
+        emoji: e
+      });
+    };
+    picker.appendChild(span);
+  });
+
+  const rect = bubble.getBoundingClientRect();
+  const parentRect = bubble.parentElement.getBoundingClientRect();
+  picker.style.top = (rect.top - parentRect.top - 42) + 'px';
+  picker.style.left = (rect.left - parentRect.left + rect.width / 2) + 'px';
+
+  bubble.parentElement.appendChild(picker);
+
+  const closeHandler = () => {
+    picker.remove();
+    document.removeEventListener('click', closeHandler);
+  };
+  setTimeout(() => document.addEventListener('click', closeHandler), 100);
+}
+
+function renderBubbleReactions(bubble, id, reactions) {
+  bubble.querySelectorAll('.msg-reactions-row').forEach(r => r.remove());
+
+  let reactionsList = [];
+  if (typeof reactions === 'string') {
+    try { reactionsList = JSON.parse(reactions || '[]'); } catch {}
+  } else if (Array.isArray(reactions)) {
+    reactionsList = reactions;
+  }
+
+  if (reactionsList.length === 0) return;
+
+  const row = document.createElement('div');
+  row.className = 'msg-reactions-row';
+
+  const emojiCounts = {};
+  reactionsList.forEach(r => {
+    emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1;
+  });
+
+  Object.entries(emojiCounts).forEach(([emoji, count]) => {
+    const badge = document.createElement('span');
+    badge.className = 'reaction-badge';
+    badge.innerHTML = `${emoji} <span style="font-size: 0.65rem;">${count}</span>`;
+    badge.title = reactionsList.filter(r => r.emoji === emoji).map(r => r.username).join(', ');
+
+    badge.onclick = e => {
+      e.stopPropagation();
+      const hasMyReaction = reactionsList.some(r => r.user_id === currentUser.id && r.emoji === emoji);
+      socket.emit('react_message', {
+        id,
+        is_group: (typeof currentActiveChatId === 'string' && currentActiveChatId.startsWith('group_')),
+        emoji: hasMyReaction ? null : emoji
+      });
+    };
+    row.appendChild(badge);
+  });
+
+  bubble.appendChild(row);
+}
+
+function updateBubbleStatusUI(bubble, status) {
+  const tick = bubble.querySelector('.msg-status-tick');
+  if (tick) {
+    if (status === 'read') {
+      tick.className = 'fa-solid fa-check-double msg-status-tick';
+      tick.style.color = '#3b82f6';
+    } else if (status === 'delivered') {
+      tick.className = 'fa-solid fa-check-double msg-status-tick';
+      tick.style.color = 'var(--text-muted)';
+    } else {
+      tick.className = 'fa-solid fa-check msg-status-tick';
+      tick.style.color = 'var(--text-muted)';
+    }
+  }
+}
+
+function startQuotedReply(id, text) {
+  activeReplyMessageId = id;
+  const bubble = document.querySelector(`.msg-bubble[data-msg-id="${id}"]`);
+  
+  let senderName = 'Message';
+  if (bubble) {
+    const nameEl = bubble.querySelector('span');
+    if (nameEl) senderName = nameEl.textContent;
+    else if (bubble.classList.contains('outgoing')) senderName = 'You';
+    else senderName = activeChat.partnerName || 'Peer';
+  }
+
+  const previewText = text.startsWith('[FILE_JSON]:') ? getMessagePreviewText(text) : text;
+  el('chats-reply-preview-title').textContent = `Replying to ${senderName}`;
+  el('chats-reply-preview-text').textContent = previewText;
+  el('chats-reply-preview-bar').classList.remove('hidden');
+  el('chats-message-input').focus();
+}
+
+function startEditingMessage(id, text) {
+  if (text.startsWith('[FILE_JSON]:')) {
+    toast('Cannot edit file attachments.', 'warning');
+    return;
+  }
+  editMessageId = id;
+  el('chats-message-input').value = text;
+  el('chats-message-input').focus();
+  el('chats-message-input').style.border = '1px solid var(--accent)';
+  toast('Editing message (press Esc to cancel)', 'info');
 }
 
 function formatBytes(bytes) {
@@ -3342,3 +3882,112 @@ function makeDraggable(element) {
     document.removeEventListener('touchend', closeDragTouch);
   }
 }
+
+// Active Speaker Detection using WebAudio API
+function startSpeakerHighlighting(stream, feedElement) {
+  if (!window.AudioContext && !window.webkitAudioContext) return;
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext.state === 'suspended') {
+      const resume = () => {
+        audioContext.resume();
+        document.removeEventListener('click', resume);
+      };
+      document.addEventListener('click', resume);
+    }
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let silenceCounter = 0;
+
+    const checkVolume = () => {
+      if (!feedElement || !feedElement.parentNode) return;
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      if (average > 15) {
+        feedElement.classList.add('active-speaker-feed');
+        silenceCounter = 0;
+      } else {
+        silenceCounter++;
+        if (silenceCounter > 15) {
+          feedElement.classList.remove('active-speaker-feed');
+        }
+      }
+      requestAnimationFrame(checkVolume);
+    };
+    requestAnimationFrame(checkVolume);
+  } catch (err) {
+    console.error('Audio analysis failed:', err);
+  }
+}
+
+// Reflow group calling video tiles dynamically
+function updateVideoGridLayout() {
+  const grid = el('classroom-video-feeds');
+  if (!grid) return;
+  const feeds = Array.from(grid.querySelectorAll('.video-feed'));
+  const count = feeds.length;
+  grid.style.display = '';
+  grid.style.gridTemplateColumns = '';
+  
+  if (count <= 1) {
+    grid.style.display = 'block';
+    feeds.forEach(f => {
+      f.style.width = '100%';
+      f.style.height = '100%';
+    });
+  } else if (count === 2) {
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    feeds.forEach(f => {
+      f.style.width = '100%';
+      f.style.height = '100%';
+    });
+  } else if (count <= 4) {
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gridAutoRows = '1fr';
+    feeds.forEach(f => {
+      f.style.width = '100%';
+      f.style.height = '100%';
+    });
+  } else {
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(120px, 1fr))';
+    grid.style.gridAutoRows = 'min-content';
+    feeds.forEach(f => {
+      f.style.width = '100%';
+      f.style.height = 'auto';
+      f.style.aspectRatio = '16/9';
+    });
+  }
+}
+
+// Auto-trigger native browser Picture-in-Picture on switching tabs
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    const callOverlay = el('call-overlay');
+    if (callOverlay && !callOverlay.classList.contains('hidden')) {
+      let remoteVideo = el('remote-video');
+      if (isGroupCall) {
+        remoteVideo = document.querySelector('.video-feed:not(.local-feed) video');
+      }
+      if (remoteVideo && remoteVideo.srcObject && !document.pictureInPictureElement) {
+        try {
+          remoteVideo.requestPictureInPicture();
+        } catch (e) {
+          console.warn('Native PiP failed:', e);
+        }
+      }
+    }
+  }
+});
