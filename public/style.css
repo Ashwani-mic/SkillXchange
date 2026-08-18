@@ -1474,28 +1474,6 @@ select option, select optgroup {
   width: 100% !important;
 }
 
-.mobile-fullscreen-btn {
-  display: none;
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 40px;
-  height: 40px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--border-subtle);
-  border-radius: 50%;
-  color: white;
-  z-index: 100;
-  backdrop-filter: blur(5px);
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  transition: all 0.2s;
-}
-.mobile-fullscreen-btn:active {
-  transform: scale(0.9);
-}
 
 .video-feeds {
   display: flex;
@@ -1890,7 +1868,6 @@ select option, select optgroup {
   .classroom-header-controls { gap: 4px; }
   .ctrl-btn { width: 36px; height: 36px; font-size: 0.9rem; }
   .ctrl-btn.end-btn { padding: 0 10px; font-size: 0.8rem; }
-  .mobile-fullscreen-btn { display: flex; }
   .video-feeds {
     flex: 0 0 45%;
     transition: flex 0.3s ease;
@@ -2202,100 +2179,7 @@ select option, select optgroup {
   color: var(--primary-light) !important;
 }
 
-/* =================== MOBILE CLASSROOM OPTIONS BOTTOM SHEET =================== */
-.mobile-options-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2000;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-  animation: fade-in 0.25s ease;
-}
-.mobile-options-sheet {
-  width: 100%;
-  max-width: 500px;
-  background: var(--surface);
-  border-top: 1px solid var(--border-subtle);
-  border-radius: 20px 20px 0 0;
-  padding: 16px 20px 32px;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
-  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.sheet-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.sheet-indicator {
-  width: 36px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
-  margin-bottom: 12px;
-}
-.sheet-header h4 {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-.sheet-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.sheet-option-btn {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.sheet-option-btn:active {
-  background: rgba(255, 255, 255, 0.08);
-  transform: scale(0.98);
-}
-.sheet-option-btn i {
-  font-size: 1.2rem;
-  color: var(--primary-light);
-  width: 24px;
-  text-align: center;
-}
-.sheet-option-btn div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.sheet-option-btn strong {
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-.sheet-option-btn span {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-.sheet-option-btn.cancel-btn {
-  justify-content: center;
-  font-weight: 600;
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-  color: var(--danger);
-  margin-top: 4px;
-}
-.sheet-option-btn.cancel-btn:active {
-  background: rgba(239, 68, 68, 0.15);
-}
+
 
 @keyframes slide-up {
   from { transform: translateY(100%); }
@@ -2509,74 +2393,7 @@ select option, select optgroup {
   margin: 0;
 }
 
-/* Mobile chats back button */
-.chats-back-btn {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: var(--ease);
-  font-family: var(--font-body);
-}
-.chats-back-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
 
-@media (max-width: 768px) {
-  .chats-layout {
-    grid-template-columns: 1fr;
-    height: calc(100dvh - 60px - 130px);
-    position: relative;
-  }
-
-  .chats-sidebar {
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Chat window slides in from the right over the entire screen */
-  .chats-chat-window {
-    position: fixed;
-    top: 0;
-    left: 100%;
-    width: 100%;
-    height: 100dvh;
-    z-index: 1005;
-    background: #050810;
-    border: none;
-    border-radius: 0;
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    display: flex !important;
-    flex-direction: column;
-  }
-
-  .chats-chat-window.mobile-active {
-    transform: translateX(-100%);
-  }
-
-  /* Show back button on mobile */
-  .chats-back-btn {
-    display: inline-flex;
-  }
-
-  /* Members sidebar: slide over chat on mobile */
-  .chats-members-sidebar {
-    position: absolute;
-    right: 0;
-    top: 70px;
-    height: calc(100% - 70px);
-    z-index: 100;
-    box-shadow: -4px 0 20px rgba(0,0,0,0.7);
-    background: rgba(13, 17, 32, 0.98) !important;
-    border-left: 1px solid rgba(255,255,255,0.08);
-    max-width: 240px;
-    width: 80%;
-  }
-}
 
 /* ====== GROUP MEMBERS LIST RESPONSIVENESS ====== */
 .chats-members-sidebar {
@@ -2720,166 +2537,7 @@ select option, select optgroup {
   border: none !important;
 }
 
-/* ====== MOBILE EXPERIENCE LAYOUT OVERRIDES ====== */
-@media (max-width: 768px) {
-  /* 1. Hide outer navigation bar and header when chat or call is active */
-  body.mobile-chat-active .app-header-nav,
-  body.mobile-chat-active .app-header,
-  body.mobile-call-active .app-header-nav,
-  body.mobile-call-active .app-header {
-    display: none !important;
-  }
 
-  /* 2. Hide in-app back button to enforce device native back navigation */
-  .chats-back-btn {
-    display: none !important;
-  }
-
-  /* 3. Call overlay FaceTime/WhatsApp style container */
-  .classroom-container {
-    position: relative;
-    height: 100dvh !important;
-    width: 100vw !important;
-    overflow: hidden;
-  }
-
-  /* 4. Top Transparent Header overlay */
-  .classroom-header {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 60px !important;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent) !important;
-    border-bottom: none !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    z-index: 100 !important;
-    padding: 0 16px !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  .classroom-brand {
-    display: none !important;
-  }
-
-  .classroom-timer-row {
-    width: 100% !important;
-    justify-content: space-between !important;
-    flex-grow: 1 !important;
-  }
-
-  /* 5. Bottom Docked Call Controls overlay */
-  .classroom-header-controls {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent) !important;
-    padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 16px)) !important;
-    display: flex !important;
-    justify-content: center !important;
-    flex-wrap: wrap !important;
-    gap: 12px !important;
-    z-index: 100 !important;
-    border: none !important;
-  }
-
-  .classroom-header-controls .ctrl-btn {
-    flex: 0 0 auto !important;
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 50% !important;
-    font-size: 1.05rem !important;
-    background: rgba(255,255,255,0.15) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-  }
-
-  .classroom-header-controls .ctrl-btn.end-btn {
-    width: auto !important;
-    padding: 0 20px !important;
-    border-radius: 24px !important;
-  }
-
-  /* Hide minimize/maximize from mobile controls flow since it is handled by history popstate/clicking bubble */
-  #call-minimize-btn {
-    display: none !important;
-  }
-
-  /* 6. Video Feeds Full Screen underlay */
-  .classroom-body {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100dvh !important;
-    padding: 0 !important;
-    display: block !important;
-  }
-
-  .video-feeds {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100dvh !important;
-    z-index: 1 !important;
-    gap: 0 !important;
-  }
-
-  /* 7. Group call responsive grid (capped aspect-ratio, no vertical stretching) */
-  .video-feeds.group-grid {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
-    grid-auto-rows: min-content !important;
-    gap: 6px !important;
-    max-height: 100dvh !important;
-    padding: 70px 8px 120px 8px !important; /* spacing for top/bottom overlays */
-    align-content: start !important;
-    height: 100% !important;
-    width: 100% !important;
-    overflow-y: auto !important;
-  }
-
-  .video-feeds.group-grid .video-feed {
-    aspect-ratio: 16/9 !important;
-    width: 100% !important;
-    height: auto !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    max-width: none !important;
-    max-height: none !important;
-    flex: none !important;
-    border: 1.5px solid rgba(255,255,255,0.1) !important;
-  }
-
-  /* 8. 1:1 call layout (fullscreen remote, floating pip local) */
-  .video-feeds:not(.group-grid) .remote-feed {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100dvh !important;
-    border-radius: 0 !important;
-    border: none !important;
-  }
-
-  .video-feeds:not(.group-grid) .local-feed,
-  .video-feeds:not(.group-grid) .draggable-pip {
-    position: absolute !important;
-    top: 75px !important;
-    right: 16px !important;
-    bottom: auto !important;
-    left: auto !important;
-    width: 90px !important;
-    height: 135px !important;
-    z-index: 50 !important;
-    border: 1.5px solid rgba(255,255,255,0.3) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-    resize: none !important;
-  }
-}
 
 /* ====== ADVANCED MESSAGING & CALLING UPGRADE STYLES ====== */
 .msg-bubble {
@@ -3050,6 +2708,63 @@ select option, select optgroup {
 
 .typing-dot:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+/* ====== CLASSROOM HOVER PIN CONTROLS ====== */
+.video-hover-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: none;
+  gap: 6px;
+  z-index: 100;
+}
+
+.video-feed:hover .video-hover-controls {
+  display: flex;
+}
+
+.video-hover-controls button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(15, 20, 35, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.video-hover-controls button:hover {
+  background: var(--primary);
+  transform: scale(1.08);
+}
+
+/* Pinned layout grid specs */
+.video-feeds.has-pinned-feed {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+  grid-template-rows: 1fr 140px !important;
+  gap: 12px !important;
+  align-content: stretch !important;
+}
+
+.video-feeds.has-pinned-feed .video-feed.pinned-active {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+}
+
+.video-feeds.has-pinned-feed .video-feed:not(.pinned-active) {
+  grid-row: 2 !important;
+  height: 130px !important;
+  width: 100% !important;
+  aspect-ratio: 16/9 !important;
 }
 
 

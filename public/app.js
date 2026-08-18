@@ -125,14 +125,7 @@ function triggerNewMessageNotification(senderName, messageText) {
     }
   }
 
-  // 2. Vibrate on mobile (short vibration for messages)
-  if ('vibrate' in navigator) {
-    try {
-      navigator.vibrate([100]);
-    } catch (e) {}
-  }
-
-  // 3. Flash document title if hidden
+  // 2. Flash document title if hidden
   if (document.hidden) {
     flashDocumentTitle(`(1) New Message — ${originalDocumentTitle}`);
   }
@@ -156,14 +149,7 @@ function triggerIncomingCallNotification(callerName, isGroup = false) {
     }
   }
 
-  // 2. Vibrate on mobile (repeating vibration pattern for calls)
-  if ('vibrate' in navigator) {
-    try {
-      navigator.vibrate([500, 250, 500, 250, 500]);
-    } catch (e) {}
-  }
-
-  // 3. Flash document title if hidden
+  // 2. Flash document title if hidden
   if (document.hidden) {
     flashDocumentTitle(`🚨 CALL FROM ${callerName.toUpperCase()} — ${originalDocumentTitle}`);
   }
@@ -590,13 +576,11 @@ function initSocketIO() {
     el('incoming-call-msg').textContent = `${callerName} is inviting you to a live 1-on-1 session.`;
     
     el('accept-call-btn').onclick = async () => {
-      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       await acceptDirectCall(callerId, callerName, offer);
     };
     
     el('decline-call-btn').onclick = () => {
-      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       socket.emit('decline_call', { to: callerId });
     };
@@ -625,7 +609,6 @@ function initSocketIO() {
   });
 
   socket.on('call_cancelled', () => {
-    if ('vibrate' in navigator) navigator.vibrate(0);
     hide('incoming-call-modal');
     toast('Call cancelled by caller.', 'info');
     endCallLocal();
@@ -639,13 +622,11 @@ function initSocketIO() {
     el('incoming-call-msg').textContent = `${callerName} is inviting you to a Group Classroom.`;
     
     el('accept-call-btn').onclick = async () => {
-      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       await joinGroupCall(roomId, callerName);
     };
     
     el('decline-call-btn').onclick = () => {
-      if ('vibrate' in navigator) navigator.vibrate(0);
       hide('incoming-call-modal');
       socket.emit('decline_group_call', { initiatorId: callerId });
     };
@@ -1608,7 +1589,6 @@ function initCallUI() {
     const overlay = el('call-overlay');
     overlay.classList.add('minimized');
     makeDraggable(overlay);
-    document.body.classList.remove('mobile-call-active');
     toast('Call minimized to bubble', 'info');
   });
 
@@ -1622,10 +1602,6 @@ function initCallUI() {
     overlay.style.bottom = '';
     overlay.style.width = '';
     overlay.style.height = '';
-    if (window.innerWidth < 768) {
-      document.body.classList.add('mobile-call-active');
-      history.pushState({ view: 'call' }, '', '#call');
-    }
     toast('Call maximized', 'info');
   };
   el('call-maximize-btn')?.addEventListener('click', restoreCallOverlay);
@@ -1657,53 +1633,6 @@ function initCallUI() {
   // Invite More Peers button click handler
   el('classroom-add-peer-btn')?.addEventListener('click', () => {
     openGroupCallModal();
-  });
-
-  // Mobile Bottom-Sheet Options click/tap handlers
-  const videoFeeds = el('classroom-video-feeds');
-  const fullscreenToggle = el('mobile-fullscreen-toggle');
-  const optionsModal = el('mobile-classroom-options-modal');
-  
-  // Tap on video feeds opens bottom options sheet on mobile
-  videoFeeds?.addEventListener('click', e => {
-    if (window.innerWidth <= 900) {
-      if (e.target.closest('.mobile-fullscreen-btn') || e.target.closest('.local-feed') || e.target.closest('.draggable-pip')) {
-        return; // ignore these taps
-      }
-      show('mobile-classroom-options-modal');
-    }
-  });
-
-  // Floating button also opens the options sheet
-  fullscreenToggle?.addEventListener('click', e => {
-    e.stopPropagation();
-    show('mobile-classroom-options-modal');
-  });
-
-  // Bottom sheet option: See Full Screen
-  el('opt-see-fullscreen')?.addEventListener('click', () => {
-    el('classroom-body')?.classList.add('video-fullscreen-mode');
-    hide('mobile-classroom-options-modal');
-    toast('Switched to full screen video', 'info');
-  });
-
-  // Bottom sheet option: Minimize Screen
-  el('opt-minimize-screen')?.addEventListener('click', () => {
-    el('classroom-body')?.classList.remove('video-fullscreen-mode');
-    hide('mobile-classroom-options-modal');
-    toast('Classroom editor restored', 'info');
-  });
-
-  // Bottom sheet cancel option
-  el('opt-cancel')?.addEventListener('click', () => {
-    hide('mobile-classroom-options-modal');
-  });
-
-  // Click outside bottom sheet to close it
-  optionsModal?.addEventListener('click', e => {
-    if (e.target === optionsModal) {
-      hide('mobile-classroom-options-modal');
-    }
   });
 
   el('tab-code-editor-btn')?.addEventListener('click', () => switchWorkspace('code-editor'));
@@ -1746,11 +1675,6 @@ async function openVideoCall(peerId, peerName, sessionId = null) {
   overlay.style.width = '';
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
-
-  if (window.innerWidth < 768) {
-    document.body.classList.add('mobile-call-active');
-    history.pushState({ view: 'call' }, '', '#call');
-  }
 
   // Render peer avatar photo in call overlay remote mock
   const remoteMock = el('remote-mock-stream');
@@ -2062,6 +1986,7 @@ function endCallLocal() {
   classroomGroupMembers = [];
   
   const videoGrid = el('classroom-video-feeds');
+  videoGrid.classList.remove('has-pinned-feed', 'group-grid');
   videoGrid.innerHTML = `
     <div class="video-feed remote-feed">
       <video id="remote-video" autoplay playsinline></video>
@@ -2085,10 +2010,6 @@ function endCallLocal() {
   overlay.classList.add('hidden');
   overlay.classList.remove('minimized');
   overlay.classList.remove('show-workspace');
-  document.body.classList.remove('mobile-call-active');
-  if (window.location.hash === '#call') {
-    history.back();
-  }
   el('call-timer').textContent = '00:00';
   isGroupCall = false;
   groupRoomId = null;
@@ -2116,11 +2037,6 @@ async function startGroupCall(invitedUsers) {
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
 
-  if (window.innerWidth < 768) {
-    document.body.classList.add('mobile-call-active');
-    history.pushState({ view: 'call' }, '', '#call');
-  }
-
   el('classroom-participants-drawer').classList.remove('hidden');
   
   // Show group-only add peer option
@@ -2141,8 +2057,16 @@ async function startGroupCall(invitedUsers) {
       <p>Camera Off</p>
     </div>
     <div class="feed-label">You (Host)</div>
+    <div class="video-hover-controls">
+      <button class="pin-btn" title="Pin / Maximize"><i class="fa-solid fa-thumbtack"></i></button>
+    </div>
   `;
   videoGrid.appendChild(localWrapper);
+  
+  const localPinBtn = localWrapper.querySelector('.pin-btn');
+  if (localPinBtn) {
+    localPinBtn.onclick = () => togglePinFeed('feed_local');
+  }
 
   startCallTimer();
   
@@ -2194,11 +2118,6 @@ async function joinGroupCall(roomId, initiatorName) {
   overlay.style.height = '';
   el('call-toggle-workspace')?.classList.remove('active');
 
-  if (window.innerWidth < 768) {
-    document.body.classList.add('mobile-call-active');
-    history.pushState({ view: 'call' }, '', '#call');
-  }
-
   el('classroom-participants-drawer').classList.remove('hidden');
   
   // Show group-only add peer option
@@ -2219,8 +2138,16 @@ async function joinGroupCall(roomId, initiatorName) {
       <p>Camera Off</p>
     </div>
     <div class="feed-label">You</div>
+    <div class="video-hover-controls">
+      <button class="pin-btn" title="Pin / Maximize"><i class="fa-solid fa-thumbtack"></i></button>
+    </div>
   `;
   videoGrid.appendChild(localWrapper);
+  
+  const localPinBtn = localWrapper.querySelector('.pin-btn');
+  if (localPinBtn) {
+    localPinBtn.onclick = () => togglePinFeed('feed_local');
+  }
 
   startCallTimer();
   
@@ -2264,8 +2191,16 @@ function createPeerFeedContainer(peerSocketId, peerUserName) {
         <span>${peerUserName}</span>
         <span class="quality-indicator" id="quality_${peerSocketId}" style="margin-left: 6px; display: inline-flex;" title="Network Quality: Good"><i class="fa-solid fa-signal" style="color: #10b981;"></i></span>
       </div>
+      <div class="video-hover-controls">
+        <button class="pin-btn" title="Pin / Maximize"><i class="fa-solid fa-thumbtack"></i></button>
+      </div>
     `;
     videoGrid.appendChild(peerFeed);
+    
+    const pinBtn = peerFeed.querySelector('.pin-btn');
+    if (pinBtn) {
+      pinBtn.onclick = () => togglePinFeed(`feed_${peerSocketId}`);
+    }
   }
 }
 
@@ -2878,20 +2813,12 @@ function initChatsPage() {
     if (e.target === el('add-member-modal')) hide('add-member-modal');
   });
 
-  // Mobile back button - return to chats sidebar list
-  el('chats-back-btn')?.addEventListener('click', () => {
-    if (window.innerWidth < 768) {
-      el('chats-window')?.classList.remove('mobile-active');
-      document.body.classList.remove('mobile-chat-active');
-      currentActiveChatId = null;
-    }
-  });
 
-  // Attach button triggers customized overlay popup menu (WhatsApp style)
+
+  // Attach button directly triggers file input
   el('chats-attach-btn')?.addEventListener('click', e => {
     e.preventDefault();
-    e.stopPropagation();
-    showAttachMenu(el('chats-attach-btn'));
+    el('chats-file-input')?.click();
   });
 
   // Selected file processing & preview overlay
@@ -3299,15 +3226,7 @@ async function selectChat(id, name, avatarUrl) {
   currentActiveChatId = id;
   activeChat.avatarUrl = avatarUrl; // Cache for calling avatar representation
 
-  // On mobile: slide in chat window
-  if (window.innerWidth < 768) {
-    el('chats-window')?.classList.add('mobile-active');
-    document.body.classList.add('mobile-chat-active');
-    history.pushState({ view: 'chat', chatId: id }, '', '#chat_' + id);
-  } else {
-    el('chats-window')?.classList.remove('mobile-active');
-    document.body.classList.remove('mobile-chat-active');
-  }
+
   
   // Highlight active chat item
   qsa('.chat-item').forEach(item => {
@@ -3643,68 +3562,6 @@ function appendChatMessageToElement(logEl, text, direction, senderName = null, i
     } catch (e) {
       console.error('Failed to parse file payload:', e);
       textEl.textContent = '[Corrupted attachment]';
-      div.appendChild(textEl);
-    }
-  } else if (text.startsWith('[LOCATION_JSON]:')) {
-    try {
-      const locInfo = JSON.parse(text.slice(16));
-      if (senderName && direction === 'incoming') {
-        const nameSpan = document.createElement('span');
-        nameSpan.style.display = 'block';
-        nameSpan.style.fontSize = '0.75rem';
-        nameSpan.style.color = '#8b5cf6';
-        nameSpan.style.fontWeight = '700';
-        nameSpan.style.marginBottom = '4px';
-        nameSpan.textContent = senderName;
-        textEl.appendChild(nameSpan);
-      }
-      const locCard = document.createElement('a');
-      locCard.href = locInfo.mapsUrl;
-      locCard.target = '_blank';
-      locCard.style.cssText = 'display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px;';
-      locCard.innerHTML = `
-        <i class="fa-solid fa-map-location-dot" style="font-size: 1.6rem; color: #10b981; flex-shrink: 0;"></i>
-        <div style="min-width: 0; flex: 1;">
-          <div style="font-weight: 600; font-size: 0.85rem; color: #fff;">Shared Location</div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); text-decoration: underline;">Click to view map</div>
-        </div>
-      `;
-      textEl.appendChild(locCard);
-      div.appendChild(textEl);
-    } catch (e) {
-      textEl.textContent = '[Location Error]';
-      div.appendChild(textEl);
-    }
-  } else if (text.startsWith('[CONTACT_JSON]:')) {
-    try {
-      const contact = JSON.parse(text.slice(15));
-      if (senderName && direction === 'incoming') {
-        const nameSpan = document.createElement('span');
-        nameSpan.style.display = 'block';
-        nameSpan.style.fontSize = '0.75rem';
-        nameSpan.style.color = '#8b5cf6';
-        nameSpan.style.fontWeight = '700';
-        nameSpan.style.marginBottom = '4px';
-        nameSpan.textContent = senderName;
-        textEl.appendChild(nameSpan);
-      }
-      const card = document.createElement('div');
-      card.style.cssText = 'display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); width: 220px;';
-      card.innerHTML = `
-        <i class="fa-solid fa-address-card" style="font-size: 1.6rem; color: #eab308; flex-shrink: 0;"></i>
-        <div style="min-width: 0; flex: 1;">
-          <div style="font-weight: 600; font-size: 0.85rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contact.peerName}</div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;">${contact.peerBio}</div>
-          <button class="view-contact-btn" style="background: var(--primary); color: #fff; border: none; padding: 4px 8px; font-size: 0.68rem; border-radius: 4px; cursor: pointer; margin-top: 6px; font-weight: 600; font-family: inherit;">View Profile</button>
-        </div>
-      `;
-      card.querySelector('.view-contact-btn').onclick = () => {
-        openPeerProfile(contact.peerId);
-      };
-      textEl.appendChild(card);
-      div.appendChild(textEl);
-    } catch (e) {
-      textEl.textContent = '[Contact Card Error]';
       div.appendChild(textEl);
     }
   } else {
@@ -4067,30 +3924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     hide('app-view');
   }
 
-  // Window popstate event listener for Native back button/gesture
-  window.addEventListener('popstate', e => {
-    const callOverlay = el('call-overlay');
-    const isCallActive = callOverlay && !callOverlay.classList.contains('hidden');
 
-    if (isCallActive) {
-      if (!callOverlay.classList.contains('minimized')) {
-        callOverlay.classList.add('minimized');
-        makeDraggable(callOverlay);
-        document.body.classList.remove('mobile-call-active');
-        toast('Call minimized to bubble', 'info');
-      } else {
-        endCall();
-      }
-      return;
-    }
-
-    const chatsWindow = el('chats-window');
-    if (chatsWindow && chatsWindow.classList.contains('mobile-active')) {
-      chatsWindow.classList.remove('mobile-active');
-      document.body.classList.remove('mobile-chat-active');
-      currentActiveChatId = null;
-    }
-  });
 
   // Fade out and remove the app loading screen (mitigates Render free tier cold starts)
   const loadingScreen = el('app-loading-screen');
@@ -4241,20 +4075,75 @@ function startSpeakerHighlighting(stream, feedElement) {
   }
 }
 
+// Toggle pin/unpin for a classroom video feed element
+function togglePinFeed(feedId) {
+  const grid = el('classroom-video-feeds');
+  if (!grid) return;
+  
+  const feed = el(feedId);
+  if (!feed) return;
+  
+  const isAlreadyPinned = feed.classList.contains('pinned-active');
+  
+  // Clear all pinned active classes and reset pin icons
+  document.querySelectorAll('.video-feed').forEach(f => {
+    f.classList.remove('pinned-active');
+    const btn = f.querySelector('.pin-btn');
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-thumbtack"></i>';
+      btn.title = 'Pin / Maximize';
+    }
+  });
+  grid.classList.remove('has-pinned-feed');
+  
+  if (!isAlreadyPinned) {
+    feed.classList.add('pinned-active');
+    grid.classList.add('has-pinned-feed');
+    const btn = feed.querySelector('.pin-btn');
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-compress" style="color: #3b82f6;"></i>';
+      btn.title = 'Unpin / Restore Grid';
+    }
+    toast('Video feed pinned to main screen', 'info');
+  } else {
+    toast('Video feed unpinned', 'info');
+  }
+  
+  // Reflow grid layout styles
+  updateVideoGridLayout();
+}
+
 // Reflow group calling video tiles dynamically
 function updateVideoGridLayout() {
   const grid = el('classroom-video-feeds');
   if (!grid) return;
+  
+  if (grid.classList.contains('has-pinned-feed')) {
+    // Reset individual inline styles so stylesheet takes precedence
+    const feeds = Array.from(grid.querySelectorAll('.video-feed'));
+    feeds.forEach(f => {
+      f.style.width = '';
+      f.style.height = '';
+      f.style.aspectRatio = '';
+    });
+    grid.style.display = '';
+    grid.style.gridTemplateColumns = '';
+    grid.style.gridAutoRows = '';
+    return;
+  }
+  
   const feeds = Array.from(grid.querySelectorAll('.video-feed'));
   const count = feeds.length;
   grid.style.display = '';
   grid.style.gridTemplateColumns = '';
+  grid.style.gridAutoRows = '';
   
   if (count <= 1) {
     grid.style.display = 'block';
     feeds.forEach(f => {
       f.style.width = '100%';
       f.style.height = '100%';
+      f.style.aspectRatio = '';
     });
   } else if (count === 2) {
     grid.style.display = 'grid';
@@ -4262,6 +4151,7 @@ function updateVideoGridLayout() {
     feeds.forEach(f => {
       f.style.width = '100%';
       f.style.height = '100%';
+      f.style.aspectRatio = '';
     });
   } else if (count <= 4) {
     grid.style.display = 'grid';
@@ -4270,6 +4160,7 @@ function updateVideoGridLayout() {
     feeds.forEach(f => {
       f.style.width = '100%';
       f.style.height = '100%';
+      f.style.aspectRatio = '';
     });
   } else {
     grid.style.display = 'grid';
@@ -4364,173 +4255,4 @@ async function openAddMemberModal(groupId, existingMembers) {
   }
 }
 
-// Customized popup attach options menu
-function showAttachMenu(btn) {
-  document.querySelectorAll('.chats-attach-menu').forEach(m => m.remove());
 
-  const menu = document.createElement('div');
-  menu.className = 'chats-attach-menu';
-  menu.style.cssText = 'position: absolute; bottom: 65px; left: 16px; background: #0f1322; border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 1008; font-size: 0.82rem; width: 160px;';
-
-  const makeOption = (icon, label, color, action) => {
-    const opt = document.createElement('button');
-    opt.type = 'button';
-    opt.style.cssText = 'background: transparent; border: none; color: #fff; padding: 8px 12px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; font-family: inherit; border-radius: 6px;';
-    opt.onmouseenter = () => opt.style.background = 'rgba(255,255,255,0.05)';
-    opt.onmouseleave = () => opt.style.background = 'transparent';
-    opt.innerHTML = `<i class="fa-solid ${icon}" style="color: ${color}; width: 16px; text-align: center;"></i> ${label}`;
-    opt.onclick = () => {
-      menu.remove();
-      action();
-    };
-    return opt;
-  };
-
-  menu.appendChild(makeOption('fa-file-arrow-up', 'Document / Photo', '#3b82f6', () => {
-    el('chats-file-input').click();
-  }));
-
-  menu.appendChild(makeOption('fa-microphone', 'Voice Note', '#ef4444', () => {
-    startVoiceNoteRecording();
-  }));
-
-  menu.appendChild(makeOption('fa-location-dot', 'Share Location', '#10b981', () => {
-    shareCurrentLocation();
-  }));
-
-  menu.appendChild(makeOption('fa-address-card', 'Share Contact', '#eab308', () => {
-    shareContactCard();
-  }));
-
-  btn.parentElement.appendChild(menu);
-
-  const closeHandler = () => {
-    menu.remove();
-    document.removeEventListener('click', closeHandler);
-  };
-  setTimeout(() => document.addEventListener('click', closeHandler), 100);
-}
-
-// Media Recorder voice note capture
-function startVoiceNoteRecording() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast('Voice notes are not supported by this browser.', 'warning');
-    return;
-  }
-
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    const mediaRecorder = new MediaRecorder(stream);
-    const audioChunks = [];
-
-    mediaRecorder.ondataavailable = e => {
-      audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = () => {
-        const base64Audio = reader.result;
-        const payload = JSON.stringify({
-          type: 'audio',
-          fileName: `Voice Note - ${new Date().toLocaleTimeString()}.webm`,
-          fileSize: audioBlob.size,
-          fileData: base64Audio
-        });
-        sendChatMessage(`[FILE_JSON]:${payload}`);
-      };
-      stream.getTracks().forEach(track => track.stop());
-    };
-
-    el('chats-input-form').innerHTML = `
-      <div style="flex: 1; display: flex; align-items: center; gap: 12px; color: #ef4444; font-weight: 500; font-size: 0.85rem;">
-        <i class="fa-solid fa-microphone fa-pulse"></i> Recording... <span id="record-timer">0:00</span>
-      </div>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-record" style="color: var(--text-muted);">Cancel</button>
-      <button type="button" class="btn btn-danger btn-sm" id="btn-stop-record" style="border-radius: 20px;"><i class="fa-solid fa-square"></i> Send</button>
-    `;
-
-    let sec = 0;
-    const recordInterval = setInterval(() => {
-      sec++;
-      const min = Math.floor(sec / 60);
-      const displaySec = (sec % 60).toString().padStart(2, '0');
-      const timerEl = el('record-timer');
-      if (timerEl) timerEl.textContent = `${min}:${displaySec}`;
-    }, 1000);
-
-    mediaRecorder.start();
-
-    el('btn-stop-record').onclick = () => {
-      clearInterval(recordInterval);
-      mediaRecorder.stop();
-      restoreForm();
-    };
-
-    el('btn-cancel-record').onclick = () => {
-      clearInterval(recordInterval);
-      mediaRecorder.stop();
-      audioChunks.length = 0;
-      restoreForm();
-    };
-
-    function restoreForm() {
-      selectChat(currentActiveChatId, el('chats-header-name').textContent, activeChat.avatarUrl);
-    }
-  }).catch(err => {
-    console.error('Mic access failed:', err);
-    toast('Could not access microphone.', 'error');
-  });
-}
-
-// Browser Geolocation position sharing
-function shareCurrentLocation() {
-  if (!navigator.geolocation) {
-    toast('Geolocation is not supported by your browser.', 'warning');
-    return;
-  }
-  toast('Fetching location...', 'info');
-  navigator.geolocation.getCurrentPosition(pos => {
-    const lat = pos.coords.latitude;
-    const lon = pos.coords.longitude;
-    const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
-    const payload = JSON.stringify({
-      type: 'location',
-      lat,
-      lon,
-      mapsUrl
-    });
-    sendChatMessage(`[LOCATION_JSON]:${payload}`);
-  }, err => {
-    console.error('Location fetch failed:', err);
-    toast('Failed to retrieve location.', 'error');
-  });
-}
-
-// Matched contact sharing card
-async function shareContactCard() {
-  try {
-    const matchesData = await api('GET', '/api/matches').catch(() => ({ matches: [] }));
-    const matches = matchesData.matches || [];
-    if (matches.length === 0) {
-      toast('No contacts available to share.', 'warning');
-      return;
-    }
-    const choice = prompt(`Select contact to share:\n` + matches.map((m, i) => `${i + 1}. ${m.fullname || m.username}`).join('\n'));
-    if (!choice) return;
-    const idx = parseInt(choice) - 1;
-    if (idx >= 0 && idx < matches.length) {
-      const selectedPeer = matches[idx];
-      const payload = JSON.stringify({
-        type: 'contact',
-        peerId: selectedPeer.id,
-        peerName: selectedPeer.fullname || selectedPeer.username,
-        peerBio: selectedPeer.bio || 'No bio provided'
-      });
-      sendChatMessage(`[CONTACT_JSON]:${payload}`);
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}

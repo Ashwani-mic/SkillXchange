@@ -468,11 +468,6 @@
             <div class="chats-window-active hidden" id="chats-window-active">
               <div class="chats-chat-main" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0;">
                 <div class="chats-window-header">
-                  <div class="chats-header-info">
-                    <!-- Back button shown on mobile only -->
-                    <button class="chats-back-btn" id="chats-back-btn" title="Back to chats">
-                      <i class="fa-solid fa-arrow-left"></i> Back
-                    </button>
                     <div class="chats-header-avatar" id="chats-header-avatar"><i class="fa-solid fa-user"></i></div>
                     <div>
                       <h3 id="chats-header-name" style="margin: 0 0 2px 0;">Active Chat</h3>
@@ -784,9 +779,6 @@
 
       <!-- Video Feeds -->
       <div class="video-feeds" id="classroom-video-feeds">
-        <button id="mobile-fullscreen-toggle" class="mobile-fullscreen-btn" title="Toggle Fullscreen">
-          <i class="fa-solid fa-expand"></i>
-        </button>
         <div class="video-feed remote-feed">
           <video id="remote-video" autoplay playsinline></video>
           <div class="feed-mock" id="remote-mock-stream">
@@ -961,34 +953,6 @@
   </div>
 </div>
 
-<!-- =================== MOBILE CLASSROOM OPTIONS BOTTOM SHEET =================== -->
-<div id="mobile-classroom-options-modal" class="mobile-options-overlay hidden">
-  <div class="mobile-options-sheet">
-    <div class="sheet-header">
-      <div class="sheet-indicator"></div>
-      <h4>Classroom Layout Options</h4>
-    </div>
-    <div class="sheet-body">
-      <button class="sheet-option-btn" id="opt-see-fullscreen">
-        <i class="fa-solid fa-expand"></i>
-        <div>
-          <strong>See Full Screen</strong>
-          <span>Hide editor/whiteboard to maximize video feeds</span>
-        </div>
-      </button>
-      <button class="sheet-option-btn" id="opt-minimize-screen">
-        <i class="fa-solid fa-compress"></i>
-        <div>
-          <strong>Minimize Screen</strong>
-          <span>Show editor/whiteboard with split video screen</span>
-        </div>
-      </button>
-      <button class="sheet-option-btn cancel-btn" id="opt-cancel">
-        Cancel
-      </button>
-    </div>
-  </div>
-</div>
 
 <!-- =================== CREATE GROUP CHAT MODAL =================== -->
 <div id="create-group-modal" class="modal-overlay hidden">
