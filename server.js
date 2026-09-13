@@ -489,7 +489,7 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
     const { message, context } = req.body || {};
     if (!message) return res.status(400).json({ error: 'Message is required.' });
 
-    // Call real LLM (Gemini 1.5 Flash)
+    // Call real LLM (Gemini 2.0 Flash)
     const reply = await ai.chatWithGemini(message, context);
     
     if (reply) {
@@ -524,7 +524,7 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
     }
 
     // Add a helper hint to configure Gemini key
-    fallbackReply += `\n\n*⚙️ [AI running in local keyword fallback mode. Set GEMINI_API_KEY in your .env to unlock real Gemini 1.5 Flash answers!]*`;
+    fallbackReply += `\n\n*⚙️ [AI running in local keyword fallback mode. Set GEMINI_API_KEY in your .env to unlock real Gemini 2.0 Flash answers!]*`;
 
     res.json({ reply: fallbackReply, source: 'fallback' });
   } catch (err) {

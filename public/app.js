@@ -1470,7 +1470,7 @@ function initAIPanel() {
       if (dot && text) {
         if (res.online) {
           dot.style.background = 'var(--emerald)';
-          text.textContent = 'Gemini 1.5 Flash (Online)';
+          text.textContent = 'Gemini 2.0 Flash (Online)';
         } else {
           dot.style.background = 'var(--orange)';
           text.textContent = 'Local AI Fallback';

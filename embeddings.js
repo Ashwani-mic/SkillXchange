@@ -126,8 +126,9 @@ async function extractSkillsFromBio(bio, apiKey = null) {
   // If API Key is available, use Gemini to do a smart extraction
   if (apiKey) {
     try {
+      const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
