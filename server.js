@@ -489,11 +489,21 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
     const { message, context } = req.body || {};
     if (!message) return res.status(400).json({ error: 'Message is required.' });
 
-    // Call real LLM (Gemini 2.0 Flash)
-    const reply = await ai.chatWithGemini(message, context);
+    // Call real LLM (Gemini 2.0 Flash with 1.5 fallback)
+    const result = await ai.chatWithGemini(message, context);
     
-    if (reply) {
-      return res.json({ reply, source: 'gemini' });
+    if (result && result.reply) {
+      return res.json({ reply: result.reply, source: 'gemini' });
+    }
+
+    if (result && result.error) {
+      console.warn('Gemini API Error:', result.error);
+      if (result.error.includes('API_KEY_INVALID') || result.error.includes('400') || result.error.includes('403') || result.error.includes('API key not valid')) {
+        return res.json({
+          reply: `⚠️ **Gemini API Error:** Your \`GEMINI_API_KEY\` on Render is invalid or expired. Please update it in your Render Dashboard (Environment tab) with a valid key from Google AI Studio.\n\n*(Google response: ${result.error.slice(0, 200)})*`,
+          source: 'error'
+        });
+      }
     }
 
     // Fallback if API key is not present or failed

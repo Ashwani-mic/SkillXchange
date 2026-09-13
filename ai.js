@@ -1,44 +1,63 @@
 const { extractSkillsFromBio } = require('./embeddings');
 
-// Simple helper to call Gemini 2.0 Flash API
+// Helper to call Gemini API with model fallback
 async function callGeminiAPI(prompt, apiKey) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: prompt }]
-      }]
-    })
-  });
+  const models = [
+    process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    'gemini-1.5-flash'
+  ];
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${errText}`);
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }]
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        // If model not found (404), try fallback model
+        if (response.status === 404 && model !== models[models.length - 1]) {
+          console.warn(`Gemini model ${model} not found (404), trying fallback...`);
+          continue;
+        }
+        throw new Error(`Google Gemini (${model}) HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new Error(`Empty response from Gemini (${model})`);
+      }
+      return text;
+    } catch (err) {
+      lastError = err;
+      if (err.message && err.message.includes('404')) continue;
+      break;
+    }
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error('Empty response from Gemini API');
-  }
-  return text;
+  throw lastError;
 }
 
 // Main AI chat wrapper
 async function chatWithGemini(message, chatContext = '', apiKey = null) {
   if (!apiKey) {
-    apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
   }
 
   if (!apiKey) {
-    // Graceful offline local fallback message
-    return null;
+    return { reply: null, error: 'GEMINI_API_KEY is not configured in environment variables.' };
   }
 
   const systemContext = `You are a helpful and expert Learning Coach assistant on SkillXchange, a peer-to-peer skill-sharing platform. 
@@ -57,10 +76,10 @@ Guidelines:
 
   try {
     const reply = await callGeminiAPI(prompt, apiKey);
-    return reply.trim();
+    return { reply: reply.trim(), error: null };
   } catch (err) {
     console.error('Failed to chat with Gemini:', err.message);
-    return null;
+    return { reply: null, error: err.message };
   }
 }
 
