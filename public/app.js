@@ -1397,6 +1397,14 @@ function initChatPanel() {
   el('ai-help-btn')?.addEventListener('click', () => {
     el('ai-drawer')?.classList.toggle('closed');
   });
+
+  el('header-ai-btn')?.addEventListener('click', () => {
+    el('ai-drawer')?.classList.toggle('closed');
+  });
+
+  el('chats-ai-btn')?.addEventListener('click', () => {
+    el('ai-drawer')?.classList.toggle('closed');
+  });
 }
 
 function openChat(peerId, peerName, avatarUrl) {

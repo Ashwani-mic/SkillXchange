@@ -1221,8 +1221,15 @@ select option, select optgroup {
 }
 .side-panel.closed { transform: translateX(100%); }
 
-.ai-panel { width: 380px; right: 400px; }
-.ai-panel.closed { transform: translateX(calc(100% + 400px)); }
+.ai-panel { 
+  width: 380px; 
+  right: 0; 
+  z-index: 100; 
+  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.4); 
+}
+.ai-panel.closed { 
+  transform: translateX(100%); 
+}
 
 .side-panel-header {
   padding: 18px 20px;

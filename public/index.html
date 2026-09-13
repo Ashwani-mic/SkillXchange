@@ -225,6 +225,9 @@
       <button class="header-nav-btn" data-tab="profile"><i class="fa-solid fa-user-gear"></i> Profile</button>
     </nav>
     <div class="app-header-right">
+      <button class="btn btn-accent btn-sm" id="header-ai-btn" title="Ask Gemini AI Assistant" style="display: flex; align-items: center; gap: 6px; border-radius: 20px; font-weight: 500; padding: 6px 12px; cursor: pointer;">
+        <i class="fa-solid fa-robot"></i> <span>AI Coach</span>
+      </button>
       <div class="credits-pill" id="credits-display" title="Your Barter Credits">
         <i class="fa-solid fa-coins"></i>
         <span id="credits-count">5</span>
@@ -483,6 +486,10 @@
                     <!-- Search messages button -->
                     <button class="btn btn-ghost btn-sm" id="chats-toggle-search-btn" title="Search messages" style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center;">
                       <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                    <!-- AI Assistant button -->
+                    <button class="btn btn-ghost btn-sm" id="chats-ai-btn" title="AI Learning Assistant (Gemini)" style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer;">
+                      <i class="fa-solid fa-robot"></i>
                     </button>
                     <!-- Members Toggle Button -->
                     <button class="btn btn-ghost btn-sm hidden" id="chats-toggle-members-btn">
