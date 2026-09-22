@@ -70,20 +70,52 @@ export function initCallUI() {
   el('tab-whiteboard-btn')?.addEventListener('click', () => switchWorkspace('whiteboard'));
 
   el('code-editor-text')?.addEventListener('input', () => {
-    if (state.socket && state.activeChat.partnerId) {
-      state.socket.emit('code_update', { code: el('code-editor-text').value, to: state.activeChat.partnerId, userId: state.currentUser?.id });
+    if (state.socket) {
+      const target = state.isGroupCall ? state.groupRoomId : (state.activeCallPartnerId || state.activeChat.partnerId);
+      if (target) {
+        state.socket.emit('code_update', {
+          code: el('code-editor-text').value,
+          to: target,
+          userId: state.currentUser?.id,
+          isGroup: state.isGroupCall
+        });
+      }
     }
   });
+
   el('whiteboard-text')?.addEventListener('input', () => {
-    if (state.socket && state.activeChat.partnerId) {
-      state.socket.emit('whiteboard_update', { text: el('whiteboard-text').value, to: state.activeChat.partnerId, userId: state.currentUser?.id });
+    if (state.socket) {
+      const target = state.isGroupCall ? state.groupRoomId : (state.activeCallPartnerId || state.activeChat.partnerId);
+      if (target) {
+        state.socket.emit('whiteboard_update', {
+          text: el('whiteboard-text').value,
+          to: target,
+          userId: state.currentUser?.id,
+          isGroup: state.isGroupCall
+        });
+      }
     }
   });
 }
 
 export function switchWorkspace(tab) {
+  const overlay = el('call-overlay');
+  if (overlay) {
+    overlay.classList.add('show-workspace');
+  }
+  el('call-toggle-workspace')?.classList.add('active');
+
   qsa('.ws-tab').forEach(t => t.classList.remove('active'));
-  qsa('.ws-pane').forEach(p => p.classList.remove('active'));
-  el(`tab-${tab}-btn`)?.classList.add('active');
-  el(`pane-${tab}`)?.classList.add('active');
+  qsa('.ws-pane').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
+
+  const activeTab = el(`tab-${tab}-btn`);
+  const activePane = el(`pane-${tab}`);
+  if (activeTab) activeTab.classList.add('active');
+  if (activePane) {
+    activePane.classList.add('active');
+    activePane.style.display = 'flex';
+  }
 }

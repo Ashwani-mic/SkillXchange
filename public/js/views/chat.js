@@ -1,7 +1,9 @@
 // Chat view: manages direct and group messaging, attachments, emoji reactions, quoted replies, and chat sidebar.
 import { state, el, show, hide, qsa, toast, formatBytes, getMessagePreviewText } from '../state.js';
 import { 
+  api,
   apiGetGroups, 
+  apiCreateGroup,
   apiExploreUsers, 
   apiGetMatches, 
   apiGetMessages, 
@@ -119,7 +121,7 @@ export function initChatsPage() {
     const memberIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value, 10));
 
     try {
-      const res = await api('POST', '/api/groups', { name, memberIds });
+      const res = await apiCreateGroup({ name, memberIds });
       hide('create-group-modal');
       toast(`👥 Group "${name}" created!`, 'success');
       loadChatsPage();

@@ -316,6 +316,19 @@ export function renderSkillPill(skill) {
 }
 
 export function initAIPanel() {
+  const toggleAIDrawer = () => {
+    const drawer = el('ai-drawer');
+    if (drawer) {
+      drawer.classList.toggle('closed');
+      if (!drawer.classList.contains('closed')) {
+        el('ai-chat-input')?.focus();
+      }
+    }
+  };
+
+  el('header-ai-btn')?.addEventListener('click', toggleAIDrawer);
+  el('chats-ai-btn')?.addEventListener('click', toggleAIDrawer);
+  el('ai-help-btn')?.addEventListener('click', toggleAIDrawer);
   el('close-ai-btn')?.addEventListener('click', () => el('ai-drawer')?.classList.add('closed'));
 
   el('ai-chat-form')?.addEventListener('submit', async e => {

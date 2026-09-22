@@ -2408,14 +2408,40 @@ select option, select optgroup {
 }
 
 /* ====== FOCUS MODE & WORKSPACE TOGGLING ====== */
+.classroom-overlay.show-workspace .classroom-body {
+  grid-template-rows: 1fr 1.2fr !important;
+}
+.classroom-overlay.show-workspace .workspace-panel {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-height: 250px !important;
+}
+
 .classroom-overlay:not(.show-workspace) .classroom-body {
   grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr 0px !important;
 }
 .classroom-overlay:not(.show-workspace) .workspace-panel {
   display: none !important;
 }
 
 @media (max-width: 768px) {
+  .classroom-overlay.show-workspace .classroom-body {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+  .classroom-overlay.show-workspace .video-feeds {
+    min-height: 220px !important;
+    height: 250px !important;
+    flex-shrink: 0 !important;
+  }
+  .classroom-overlay.show-workspace .workspace-panel {
+    display: flex !important;
+    min-height: 300px !important;
+    flex: 1 !important;
+  }
   .classroom-overlay:not(.show-workspace) .video-feeds {
     flex: 1 1 100% !important;
   }

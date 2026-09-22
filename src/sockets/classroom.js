@@ -11,13 +11,21 @@ function registerClassroomHandlers(io, socket) {
   });
 
   // Code editor collaboration
-  socket.on('code_update', ({ code, to, userId }) => {
-    io.to(`user_${to}`).emit('code_update', { code, userId });
+  socket.on('code_update', ({ code, to, userId, isGroup }) => {
+    if (isGroup || (typeof to === 'string' && to.startsWith('group_'))) {
+      socket.to(to).emit('code_update', { code, userId });
+    } else {
+      io.to(`user_${to}`).emit('code_update', { code, userId });
+    }
   });
 
   // Whiteboard collaboration
-  socket.on('whiteboard_update', ({ text, to, userId }) => {
-    io.to(`user_${to}`).emit('whiteboard_update', { text, userId });
+  socket.on('whiteboard_update', ({ text, to, userId, isGroup }) => {
+    if (isGroup || (typeof to === 'string' && to.startsWith('group_'))) {
+      socket.to(to).emit('whiteboard_update', { text, userId });
+    } else {
+      io.to(`user_${to}`).emit('whiteboard_update', { text, userId });
+    }
   });
 
   // Host moderation: kick participant

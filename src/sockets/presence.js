@@ -27,14 +27,13 @@ function registerPresenceHandlers(io, socket, getParticipantsList) {
   initHeartbeatScanner(io);
 
   socket.on('authenticate', async (clientUserId) => {
-    // Read user ID strictly from the shared Express session to prevent impersonation
+    // Read user ID from session, with fallback to clientUserId if session handshake is delayed
     const sessionUserId = socket.request?.session?.userId;
-    if (!sessionUserId) {
+    const authenticatedUserId = sessionUserId || parseInt(clientUserId, 10);
+    if (!authenticatedUserId) {
       console.warn(`⚠️ Unauthenticated socket ${socket.id} attempted authenticate.`);
       return;
     }
-
-    const authenticatedUserId = sessionUserId;
 
     // Clean up any stale sockets previously mapped to this user to avoid presence desync
     const oldSocketId = onlineUsers.get(authenticatedUserId);

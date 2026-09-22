@@ -44,7 +44,7 @@ export async function openVideoCall(peerId, peerName, sessionId = null) {
   if (overlay) {
     overlay.classList.remove('hidden');
     overlay.classList.remove('minimized');
-    overlay.classList.remove('show-workspace');
+    overlay.classList.add('show-workspace');
     overlay.style.top = '';
     overlay.style.left = '';
     overlay.style.right = '';
@@ -52,7 +52,7 @@ export async function openVideoCall(peerId, peerName, sessionId = null) {
     overlay.style.width = '';
     overlay.style.height = '';
   }
-  el('call-toggle-workspace')?.classList.remove('active');
+  el('call-toggle-workspace')?.classList.add('active');
 
   const remoteMock = el('remote-mock-stream');
   if (remoteMock) {
@@ -119,7 +119,13 @@ export async function acceptDirectCall(callerId, callerName, offer) {
   state.activeChat.partnerId = callerId;
   state.activeChat.partnerName = callerName;
   if (el('classroom-peer-name')) el('classroom-peer-name').textContent = callerName;
-  el('call-overlay')?.classList.remove('hidden');
+  const overlay = el('call-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    overlay.classList.remove('minimized');
+    overlay.classList.add('show-workspace');
+  }
+  el('call-toggle-workspace')?.classList.add('active');
   el('classroom-video-feeds')?.classList.remove('group-grid');
   el('classroom-participants-drawer')?.classList.add('hidden');
   
@@ -176,13 +182,15 @@ export function initPeerConnection(peerId) {
         remoteVideo.srcObject.addTrack(e.track);
       }
       hide('remote-mock-stream');
+      remoteVideo.play().catch(err => console.log('Autoplay play error:', err));
     }
   };
 
   state.peerConnection.onicecandidate = e => {
     if (e.candidate && state.socket) {
       console.log("Sending ICE candidate to peer:", e.candidate.candidate);
-      state.socket.emit('webrtc_ice', { candidate: e.candidate, to: peerId });
+      const candData = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
+      state.socket.emit('webrtc_ice', { candidate: candData, to: peerId });
     }
   };
 
@@ -417,7 +425,7 @@ export async function startGroupCall(invitedUsers) {
   if (overlay) {
     overlay.classList.remove('hidden');
     overlay.classList.remove('minimized');
-    overlay.classList.remove('show-workspace');
+    overlay.classList.add('show-workspace');
     overlay.style.top = '';
     overlay.style.left = '';
     overlay.style.right = '';
@@ -425,7 +433,7 @@ export async function startGroupCall(invitedUsers) {
     overlay.style.width = '';
     overlay.style.height = '';
   }
-  el('call-toggle-workspace')?.classList.remove('active');
+  el('call-toggle-workspace')?.classList.add('active');
   el('classroom-participants-drawer')?.classList.remove('hidden');
   
   const drawerActions = el('classroom-drawer-actions');
@@ -502,7 +510,7 @@ export async function joinGroupCall(roomId, initiatorName) {
   if (overlay) {
     overlay.classList.remove('hidden');
     overlay.classList.remove('minimized');
-    overlay.classList.remove('show-workspace');
+    overlay.classList.add('show-workspace');
     overlay.style.top = '';
     overlay.style.left = '';
     overlay.style.right = '';
@@ -510,7 +518,7 @@ export async function joinGroupCall(roomId, initiatorName) {
     overlay.style.width = '';
     overlay.style.height = '';
   }
-  el('call-toggle-workspace')?.classList.remove('active');
+  el('call-toggle-workspace')?.classList.add('active');
   el('classroom-participants-drawer')?.classList.remove('hidden');
   
   const drawerActions = el('classroom-drawer-actions');
@@ -619,9 +627,10 @@ export function createGroupPeerConnection(peerSocketId, peerUserId, peerUserName
   
   pc.onicecandidate = e => {
     if (e.candidate && state.socket) {
+      const candData = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
       state.socket.emit('group_signal', {
         toSocketId: peerSocketId,
-        signalData: { type: 'ice-candidate', candidate: e.candidate }
+        signalData: { type: 'ice-candidate', candidate: candData }
       });
     }
   };
@@ -673,6 +682,7 @@ export function renderRemoteGroupStream(peerSocketId, peerUserId, peerUserName, 
     
     videoEl.style.display = 'block';
     if (mockEl) mockEl.style.display = 'none';
+    videoEl.play().catch(err => console.log('Autoplay play error for group peer:', err));
     
     if (videoEl.srcObject) {
       startSpeakerHighlighting(videoEl.srcObject, el(`feed_${peerSocketId}`));

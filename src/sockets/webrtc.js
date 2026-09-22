@@ -47,15 +47,35 @@ function registerWebRTCHandlers(io, socket) {
   socket.on('webrtc_offer', ({ offer, to }) => {
     const authenticatedUserId = socket.authenticatedUserId;
     if (!authenticatedUserId) return;
-    io.to(`user_${to}`).emit('webrtc_offer', { offer, from: authenticatedUserId });
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { offer, from: authenticatedUserId };
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_offer', payload);
+    }
+    io.to(`user_${to}`).emit('webrtc_offer', payload);
   });
 
   socket.on('webrtc_answer', ({ answer, to }) => {
-    io.to(`user_${to}`).emit('webrtc_answer', { answer });
+    const authenticatedUserId = socket.authenticatedUserId;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { answer, from: authenticatedUserId };
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_answer', payload);
+    }
+    io.to(`user_${to}`).emit('webrtc_answer', payload);
   });
 
   socket.on('webrtc_ice', ({ candidate, to }) => {
-    io.to(`user_${to}`).emit('webrtc_ice', { candidate });
+    const authenticatedUserId = socket.authenticatedUserId;
+    const targetUserId = parseInt(to);
+    const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { candidate, from: authenticatedUserId };
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('webrtc_ice', payload);
+    }
+    io.to(`user_${to}`).emit('webrtc_ice', payload);
   });
 
   // WebRTC 1-on-1 Signaling Enhanced Flow
@@ -64,13 +84,15 @@ function registerWebRTCHandlers(io, socket) {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(to);
     const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = {
+      callerId: authenticatedUserId,
+      callerName: senderName,
+      offer
+    };
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('incoming_call', {
-        callerId: authenticatedUserId,
-        callerName: senderName,
-        offer
-      });
+      io.to(recipientSocketId).emit('incoming_call', payload);
     }
+    io.to(`user_${targetUserId}`).emit('incoming_call', payload);
   });
 
   socket.on('decline_call', async ({ to }) => {
@@ -78,9 +100,11 @@ function registerWebRTCHandlers(io, socket) {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(to);
     const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { from: authenticatedUserId };
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('call_declined', { from: authenticatedUserId });
+      io.to(recipientSocketId).emit('call_declined', payload);
     }
+    io.to(`user_${targetUserId}`).emit('call_declined', payload);
     await db.saveCallLog(targetUserId, authenticatedUserId, 'direct', 'rejected');
   });
 
@@ -89,9 +113,11 @@ function registerWebRTCHandlers(io, socket) {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(to);
     const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { answer, from: authenticatedUserId };
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('call_accepted', { answer, from: authenticatedUserId });
+      io.to(recipientSocketId).emit('call_accepted', payload);
     }
+    io.to(`user_${targetUserId}`).emit('call_accepted', payload);
   });
 
   socket.on('hang_up', async ({ to, callerId, receiverId }) => {
@@ -99,9 +125,11 @@ function registerWebRTCHandlers(io, socket) {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(to);
     const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { from: authenticatedUserId };
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('call_ended', { from: authenticatedUserId });
+      io.to(recipientSocketId).emit('call_ended', payload);
     }
+    io.to(`user_${targetUserId}`).emit('call_ended', payload);
     const finalCallerId = parseInt(callerId) || authenticatedUserId;
     const finalReceiverId = parseInt(receiverId) || targetUserId;
     await db.saveCallLog(finalCallerId, finalReceiverId, 'direct', 'completed');
@@ -112,9 +140,11 @@ function registerWebRTCHandlers(io, socket) {
     if (!authenticatedUserId) return;
     const targetUserId = parseInt(to);
     const recipientSocketId = onlineUsers.get(targetUserId);
+    const payload = { from: authenticatedUserId };
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('call_cancelled', { from: authenticatedUserId });
+      io.to(recipientSocketId).emit('call_cancelled', payload);
     }
+    io.to(`user_${targetUserId}`).emit('call_cancelled', payload);
     await db.saveCallLog(authenticatedUserId, targetUserId, 'direct', 'missed');
   });
 
@@ -138,17 +168,17 @@ function registerWebRTCHandlers(io, socket) {
       const id = parseInt(u.id);
       if (id === authenticatedUserId) return;
       const recipientSocketId = onlineUsers.get(id);
+      const payload = {
+        roomId,
+        callerId: authenticatedUserId,
+        callerName: senderName,
+        invitedUserIds: invitedUsers.map(usr => usr.id)
+      };
       if (recipientSocketId) {
         console.log(`✉️ Delivering incoming_group_call alert to User ${id} on socket ${recipientSocketId}`);
-        io.to(recipientSocketId).emit('incoming_group_call', {
-          roomId,
-          callerId: authenticatedUserId,
-          callerName: senderName,
-          invitedUserIds: invitedUsers.map(usr => usr.id)
-        });
-      } else {
-        console.log(`⚠️ User ${id} is offline. Inviting into missed call logs.`);
+        io.to(recipientSocketId).emit('incoming_group_call', payload);
       }
+      io.to(`user_${id}`).emit('incoming_group_call', payload);
       await db.saveCallLog(authenticatedUserId, id, 'group', 'missed');
     });
   });
