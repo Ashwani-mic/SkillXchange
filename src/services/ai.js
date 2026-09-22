@@ -4,9 +4,11 @@ const { extractSkillsFromBio } = require('./embeddings');
 // Helper to call Gemini API with model fallback
 async function callGeminiAPI(prompt, apiKey) {
   const models = [
-    process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    process.env.GEMINI_MODEL,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
     'gemini-1.5-flash'
-  ];
+  ].filter(Boolean);
 
   let lastError = null;
 

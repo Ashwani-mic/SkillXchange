@@ -8,7 +8,8 @@ import {
   apiAddSkill, 
   apiDeleteSkill, 
   apiAIExtractTags, 
-  apiAIChat 
+  apiAIChat,
+  apiGetAIConfig 
 } from '../api.js';
 import { renderStars, loadMatches } from './explore.js';
 
@@ -315,6 +316,35 @@ export function renderSkillPill(skill) {
   return div;
 }
 
+export async function updateAIStatus() {
+  const statusText = el('ai-status-text');
+  const statusDot = el('ai-status-dot');
+  if (!statusText || !statusDot) return;
+
+  try {
+    const res = await apiGetAIConfig();
+    if (res && res.online) {
+      statusText.textContent = `AI Status: online (${res.model || 'Gemini 2.5'})`;
+      statusText.style.color = '#10b981';
+      statusDot.style.background = '#10b981';
+      statusDot.style.boxShadow = '0 0 8px rgba(16, 185, 129, 0.7)';
+      if (res.validFormat === false) {
+        statusText.title = 'Warning: API key format does not match Google AI Studio (starts with AIzaSy).';
+      }
+    } else {
+      statusText.textContent = 'AI Status: offline (No API key)';
+      statusText.style.color = 'var(--text-muted)';
+      statusDot.style.background = 'var(--text-muted)';
+      statusDot.style.boxShadow = 'none';
+    }
+  } catch {
+    statusText.textContent = 'AI Status: offline';
+    statusText.style.color = 'var(--text-muted)';
+    statusDot.style.background = 'var(--text-muted)';
+    statusDot.style.boxShadow = 'none';
+  }
+}
+
 export function initAIPanel() {
   const toggleAIDrawer = () => {
     const drawer = el('ai-drawer');
@@ -322,9 +352,12 @@ export function initAIPanel() {
       drawer.classList.toggle('closed');
       if (!drawer.classList.contains('closed')) {
         el('ai-chat-input')?.focus();
+        updateAIStatus();
       }
     }
   };
+
+  updateAIStatus();
 
   el('header-ai-btn')?.addEventListener('click', toggleAIDrawer);
   el('chats-ai-btn')?.addEventListener('click', toggleAIDrawer);
@@ -358,12 +391,14 @@ export function initAIPanel() {
     if (history) history.scrollTop = history.scrollHeight;
   });
 
-  qsa('.ai-quick-btn').forEach(btn => {
+  qsa('.ai-quick-prompts .ai-chip, .ai-quick-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const prompt = btn.dataset.prompt;
       const input = el('ai-chat-input');
-      if (input) input.value = prompt;
-      el('ai-chat-form')?.dispatchEvent(new Event('submit'));
+      if (input && prompt) {
+        input.value = prompt;
+        el('ai-chat-form')?.dispatchEvent(new Event('submit'));
+      }
     });
   });
 }

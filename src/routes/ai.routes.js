@@ -5,9 +5,15 @@ const requireAuth = require('../middleware/requireAuth');
 const ai = require('../services/ai');
 
 // GET /api/ai/config
-router.get('/config', requireAuth, (req, res) => {
-  const hasKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
-  res.json({ online: hasKey });
+router.get('/config', (req, res) => {
+  const key = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
+  const hasKey = !!key;
+  const isGoogleKeyFormat = key.startsWith('AIzaSy');
+  res.json({
+    online: hasKey,
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    validFormat: hasKey ? isGoogleKeyFormat : false
+  });
 });
 
 // POST /api/ai/chat
