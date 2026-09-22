@@ -62,15 +62,28 @@ Open **[http://localhost:3001](http://localhost:3001)** in your web browser.
 
 ```text
 SkillXchange/
-├── server.js            ← Express server backend + Socket.IO handlers
-├── db.js                ← PostgreSQL database layer + compatibility wrappers
-├── seed.js              ← Database seeder script
-├── matching.js          ← Cosine similarity semantic matching engine
-├── ai.js                ← Gemini LLM API client wrapper
-├── embeddings.js        ← ONNX Feature Extraction embedding generator
-├── docker-compose.yml   ← Local PostgreSQL DB Docker recipe
-├── package.json         ← Project dependencies (pg driver integrated)
-└── public/              ← Client-side static assets (HTML, CSS, JS)
+├── src/
+│   ├── config/             ← Environment variable validation
+│   ├── db/                 ← PostgreSQL client & query wrappers
+│   ├── middleware/         ← Express session auth guard
+│   ├── routes/             ← Express routers (auth, users, skills, matches, etc.)
+│   ├── services/           ← Matching, embeddings, AI integration
+│   ├── sockets/            ← Socket.IO handlers (presence, chat, webrtc, classroom)
+│   └── server.js           ← Backend server initialization
+├── public/
+│   ├── js/
+│   │   ├── api.js          ← API client helpers
+│   │   ├── socket.js       ← Socket.IO client lifecycle & presence
+│   │   ├── state.js        ← Global state store & toast notifications
+│   │   ├── webrtc.js       ← WebRTC video calling engine
+│   │   ├── main.js         ← App entry point
+│   │   └── views/          ← Modular views (auth, chat, classroom, explore, profile, sessions)
+│   ├── css/                ← Application stylesheets
+│   └── index.html          ← Single-page application shell
+├── seed.js                 ← Database seeder script
+├── test_matching.js        ← Match engine verification suite
+├── server.js               ← Root entry point
+└── package.json            ← Dependencies & scripts (npm test, npm start)
 ```
 
 ---

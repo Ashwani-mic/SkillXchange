@@ -1,10 +1,10 @@
-const db = require('./db');
-const { getMatchesForUser } = require('./matching');
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const db = require('./src/db');
+const { getMatchesForUser } = require('./src/services/matching');
 const bcrypt = require('bcryptjs');
 
-async function test() {
-  console.log('--- Starting Match Engine Verification Test ---');
-
+test('Skill matching engine computes bidirectional and unidirectional matches correctly', async () => {
   // Initialize DB tables
   await db.initDatabase();
 
@@ -28,7 +28,7 @@ async function test() {
     ['charlie', 'charlie@test.com', pwHash, 'Charlie Language Lover', 'Polyglot enthusiast']
   );
 
-  console.log('Created Alice (ID:', alice.id, '), Bob (ID:', bob.id, '), Charlie (ID:', charlie.id, ')');
+  console.log(`Created test users: Alice (${alice.id}), Bob (${bob.id}), Charlie (${charlie.id})`);
 
   // 2. Insert Skills
   // Alice teaches JavaScript, wants to learn Piano
@@ -39,36 +39,26 @@ async function test() {
   await db.run('INSERT INTO user_skills (user_id, skill_name, skill_type, proficiency_level) VALUES (?, ?, ?, ?)', [bob.id, 'Piano', 'teach', 'expert']);
   await db.run('INSERT INTO user_skills (user_id, skill_name, skill_type, proficiency_level) VALUES (?, ?, ?, ?)', [bob.id, 'JavaScript', 'learn', 'beginner']);
 
-  // Charlie teaches Piano, wants to learn Spanish (One-way match: Charlie teaches what Alice wants, but Charlie wants Spanish which Alice doesn't teach)
+  // Charlie teaches Piano, wants to learn Spanish (One-way match)
   await db.run('INSERT INTO user_skills (user_id, skill_name, skill_type, proficiency_level) VALUES (?, ?, ?, ?)', [charlie.id, 'Piano', 'teach', 'expert']);
   await db.run('INSERT INTO user_skills (user_id, skill_name, skill_type, proficiency_level) VALUES (?, ?, ?, ?)', [charlie.id, 'Spanish', 'learn', 'beginner']);
 
-  console.log('Inserted skills for Alice, Bob, and Charlie.');
-
   // 3. Run Matchmaking Engine for Alice
   const matches = await getMatchesForUser(alice.id);
-  console.log('\nMatches computed for Alice:');
-  console.log(JSON.stringify(matches, null, 2));
+  console.log('Matches computed for Alice:', matches.map(m => ({ id: m.id, username: m.username, score: m.match_score, type: m.match_type })));
 
   // 4. Assert correctness
-  if (matches.length !== 2) {
-    throw new Error(`Expected 2 matches, got ${matches.length}`);
-  }
+  assert.equal(matches.length, 2, `Expected 2 matches, got ${matches.length}`);
 
   const firstMatch = matches[0];
-  if (firstMatch.id !== bob.id || firstMatch.match_score !== 100 || firstMatch.match_type !== 'perfect') {
-    throw new Error(`Bob should be the 100% Perfect Match. Got: ${JSON.stringify(firstMatch)}`);
-  }
+  assert.equal(firstMatch.id, bob.id, 'Bob should be the first match');
+  assert.equal(firstMatch.match_score, 100, 'Bob should have 100% match score');
+  assert.equal(firstMatch.match_type, 'perfect', 'Bob should be a perfect match');
 
   const secondMatch = matches[1];
-  if (secondMatch.id !== charlie.id || secondMatch.match_score !== 25 || secondMatch.match_type !== 'partial') {
-    throw new Error(`Charlie should be a 25% partial match. Got: ${JSON.stringify(secondMatch)}`);
-  }
+  assert.equal(secondMatch.id, charlie.id, 'Charlie should be the second match');
+  assert.equal(secondMatch.match_score, 25, 'Charlie should have 25% match score');
+  assert.equal(secondMatch.match_type, 'partial', 'Charlie should be a partial match');
 
-  console.log('\n--- SUCCESS: Match Engine Verification Test Passed! ---');
-}
-
-test().catch(err => {
-  console.error('Test Failed:', err);
-  process.exit(1);
+  setTimeout(() => process.exit(0), 100);
 });

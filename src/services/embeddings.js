@@ -1,4 +1,5 @@
-const db = require('./db');
+// Embeddings service: generates semantic embeddings using local ONNX transformers or fallback heuristics with PostgreSQL caching.
+const db = require('../db');
 
 let extractor = null;
 let modelLoading = null;

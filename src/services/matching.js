@@ -1,4 +1,5 @@
-const db = require('./db');
+// Matchmaking service: computes semantic compatibility and reciprocal skill matches between users.
+const db = require('../db');
 const { getEmbedding, cosineSimilarity } = require('./embeddings');
 
 /**

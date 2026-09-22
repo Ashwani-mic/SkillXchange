@@ -1,3 +1,4 @@
+// AI assistant service: integrates with Gemini LLM for learning coaching and bio skill extraction.
 const { extractSkillsFromBio } = require('./embeddings');
 
 // Helper to call Gemini API with model fallback
@@ -119,14 +120,14 @@ Do not return any explanations or markdown blocks.`;
         };
       }
     } catch (err) {
-      console.warn('Gemini structured extraction failed, mapping flat list:', err.message);
+      console.warn('Gemini structured extraction failed, returning flat tags:', err.message);
     }
   }
 
-  // Fallback: we return the flat tags list under both categories so the user can choose
+  // Local fallback: split evenly or provide as general recommendations
   return {
-    teach: tags,
-    learn: tags
+    teach: tags.slice(0, Math.ceil(tags.length / 2)),
+    learn: tags.slice(Math.ceil(tags.length / 2))
   };
 }
 

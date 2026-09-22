@@ -1,3 +1,4 @@
+// Database layer: manages PostgreSQL pool, query translation, schema initialization, and data persistence helpers.
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -42,6 +43,10 @@ if (!isLocalhost) {
 const pool = new Pool(poolConfig);
 
 let hasContentColumn = false;
+
+function getHasContentColumn() {
+  return hasContentColumn;
+}
 
 // Query translation helper: Converts SQLite-style '?' placeholders to PostgreSQL '$1, $2, ...'
 function translateQuery(sql) {
@@ -132,9 +137,9 @@ async function initDatabase() {
     console.log('Migration: added average_rating column');
   }
   if (!userColNames.includes('is_verified')) {
-     await run('ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1');
-     console.log('Migration: added is_verified column');
-   }
+    await run('ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1');
+    console.log('Migration: added is_verified column');
+  }
   if (!userColNames.includes('avatar_url')) {
     await run('ALTER TABLE users ADD COLUMN avatar_url TEXT');
     console.log('Migration: added avatar_url column');
@@ -171,19 +176,6 @@ async function initDatabase() {
       message          TEXT,
       message_text     TEXT,
       created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      timestamp        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(sender_id)   REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY(receiver_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  // ---- CHAT HISTORY TABLE ----
-  await run(`
-    CREATE TABLE IF NOT EXISTS chat_history (
-      id               SERIAL PRIMARY KEY,
-      sender_id        INTEGER NOT NULL,
-      receiver_id      INTEGER NOT NULL,
-      message_payload  TEXT NOT NULL,
       timestamp        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(sender_id)   REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(receiver_id) REFERENCES users(id) ON DELETE CASCADE
@@ -249,20 +241,7 @@ async function initDatabase() {
     )
   `);
 
-  // ---- CALL HISTORY TABLE ----
-  await run(`
-    CREATE TABLE IF NOT EXISTS call_history (
-      id               SERIAL PRIMARY KEY,
-      caller_id        INTEGER NOT NULL,
-      receiver_ids     TEXT NOT NULL,
-      call_duration    INTEGER,
-      status           VARCHAR(50) NOT NULL CHECK(status IN ('missed', 'answered', 'ended')),
-      timestamp        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(caller_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  // ---- CALL LOGS TABLE (NEW) ----
+  // ---- CALL LOGS TABLE ----
   await run(`
     CREATE TABLE IF NOT EXISTS call_logs (
       id               SERIAL PRIMARY KEY,
@@ -305,19 +284,6 @@ async function initDatabase() {
     }
   } catch {}
 
-  // ---- VERIFICATION TOKENS TABLE ----
-  await run(`
-    CREATE TABLE IF NOT EXISTS verification_tokens (
-      id            SERIAL PRIMARY KEY,
-      user_id       INTEGER NOT NULL,
-      token         TEXT    NOT NULL,
-      expires_at    TIMESTAMP NOT NULL,
-      used          INTEGER DEFAULT 0,
-      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(user_id)
-    )
-  `);
-
   // ---- SKILL EMBEDDINGS CACHE TABLE ----
   await run(`
     CREATE TABLE IF NOT EXISTS skill_embeddings (
@@ -327,7 +293,7 @@ async function initDatabase() {
     )
   `);
 
-  // ---- GROUPS TABLES (PERSISTENT CHAT & CLASSROOM GROUPS) ----
+  // ---- GROUPS TABLES ----
   await run(`
     CREATE TABLE IF NOT EXISTS groups (
       id               SERIAL PRIMARY KEY,
@@ -407,50 +373,6 @@ async function initDatabase() {
   console.log('✅ Database tables initialized successfully.');
 }
 
-// Helper to store verification token
-async function saveVerificationToken(userId, token, expiresAt) {
-  try {
-    await run(`INSERT INTO verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)`, [userId, token, expiresAt]);
-  } catch (e) {
-    console.error('Failed to save verification token:', e.message);
-  }
-}
-
-// Helper to verify token and activate user
-async function verifyToken(token) {
-  try {
-    const row = await get(`SELECT id, user_id, expires_at, used FROM verification_tokens WHERE token = ?`, [token]);
-    if (!row) return { valid: false, message: 'Invalid token' };
-    if (row.used) return { valid: false, message: 'Token already used' };
-    if (new Date(row.expires_at) < new Date()) return { valid: false, message: 'Token expired' };
-    await run('UPDATE users SET is_verified = 1 WHERE id = ?', [row.user_id]);
-    await run('UPDATE verification_tokens SET used = 1 WHERE id = ?', [row.id]);
-    return { valid: true, userId: row.user_id };
-  } catch (e) {
-    console.error('Token verification error:', e.message);
-    return { valid: false, message: 'Error verifying token' };
-  }
-}
-
-// Helper to store chat messages in chat_history
-async function saveChatMessage(senderId, receiverId, payload) {
-  try {
-    await run(`INSERT INTO chat_history (sender_id, receiver_id, message_payload) VALUES (?, ?, ?)`, [senderId, receiverId, payload]);
-  } catch (e) {
-    console.error('Failed to save chat history:', e.message);
-  }
-}
-
-// Helper to store call records in call_history
-async function saveCallRecord(callerId, receiverIdsArray, durationSec, status) {
-  const receiverIds = JSON.stringify(receiverIdsArray);
-  try {
-    await run(`INSERT INTO call_history (caller_id, receiver_ids, call_duration, status) VALUES (?, ?, ?, ?)`, [callerId, receiverIds, durationSec, status]);
-  } catch (e) {
-    console.error('Failed to save call history:', e.message);
-  }
-}
-
 // Helper to store call records in call_logs
 async function saveCallLog(callerId, receiverId, callType, status) {
   try {
@@ -463,7 +385,7 @@ async function saveCallLog(callerId, receiverId, callType, status) {
   }
 }
 
-// Helper to save direct messages supporting both schemas with and without content column
+// Helper to save direct messages supporting schemas with or without content column
 async function saveDirectMessage(senderId, receiverId, messageText, replyToId = null) {
   try {
     if (hasContentColumn) {
@@ -489,10 +411,10 @@ module.exports = {
   run,
   get,
   all,
-  saveVerificationToken,
-  verifyToken,
-  saveChatMessage,
-  saveCallRecord,
   saveCallLog,
-  saveDirectMessage
+  saveDirectMessage,
+  getHasContentColumn,
+  get hasContentColumn() {
+    return hasContentColumn;
+  }
 };
