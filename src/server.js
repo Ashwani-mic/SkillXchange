@@ -33,14 +33,18 @@ app.set('io', io);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Trust reverse proxies (Render, Cloudflare, Heroku) for HTTPS cookies
+app.set('trust proxy', 1);
+
 const sessionMiddleware = session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    secure: isProduction,
-    sameSite: 'lax'
+    secure: 'auto',
+    sameSite: 'lax',
+    httpOnly: true
   }
 });
 

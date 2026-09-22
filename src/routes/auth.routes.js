@@ -43,7 +43,10 @@ router.post('/register', async (req, res) => {
     // Auto-login
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.status(201).json({ user, message: 'Account created and logged in.' });
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: 'Failed to save session.' });
+      res.status(201).json({ user, message: 'Account created and logged in.' });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -66,8 +69,11 @@ router.post('/login', async (req, res) => {
 
     req.session.userId = user.id;
     req.session.username = user.username;
-    const { password_hash: _, is_verified: __, ...safeUser } = user;
-    res.json({ user: safeUser });
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: 'Failed to save session.' });
+      const { password_hash: _, is_verified: __, ...safeUser } = user;
+      res.json({ user: safeUser });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

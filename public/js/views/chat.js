@@ -437,6 +437,13 @@ export async function loadChatsPage() {
       });
     }
   } catch (err) {
+    if (err.message && err.message.toLowerCase().includes('not authenticated')) {
+      state.currentUser = null;
+      hide('app-view');
+      show('landing-view');
+      toast('Your session has expired. Please log in again.', 'warning');
+      return;
+    }
     listContainer.innerHTML = `<div class="error-msg">Failed to load: ${err.message}</div>`;
   }
 }
