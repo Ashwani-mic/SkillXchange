@@ -97,7 +97,7 @@ app.get('*', (req, res) => {
 // =====================================================
 //  START SERVER
 // =====================================================
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 SkillXchange running at: http://localhost:${PORT}`);
   console.log(`   Open this URL in your browser to access the app.\n`);
 });
